@@ -48,7 +48,6 @@ pub struct MEMORY_BASIC_INFORMATION {
     pub BaseAddress: *mut std::ffi::c_void,
     pub AllocationBase: *mut std::ffi::c_void,
     pub AllocationProtect: u32,
-    pub PartitionId: u16,
     pub RegionSize: usize,
     pub State: u32,
     pub Protect: u32,

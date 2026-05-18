@@ -1,23 +1,21 @@
-//! 进程内存扫描器
+//! 进程内存扫描器 — 块读取优化版
 //!
-//! 通过 VirtualQueryEx 枚举所有内存页 → 扫描 MonoImage 签名
-//! 替代 CreateRemoteThread 方案（被 ACG 阻止）
+//! 每次读取 64KB → 本地扫描 MonoImage 签名
 
-use hb_core::win32::ProcessHandle;
 use hb_core::win32::query_memory_info;
+use hb_core::win32::ProcessHandle;
 
-// MonoImage 偏移: +0x1C = 名称字符串指针, +0x20 = 文件名指针
-const MONO_IMAGE_NAME_OFF: usize = 0x1C;
-const MONO_IMAGE_FILE_OFF: usize = 0x20;
+const NAME_OFF: usize = 0x1C;
+const FILE_OFF: usize = 0x20;
 
-/// 找到目标进程中的 MonoImage
+#[derive(Debug)]
 pub struct MonoImageInfo {
     pub address: usize,
     pub name: String,
     pub filename: String,
 }
 
-/// 枚举所有 Assembly-CSharp 等关键映像
+/// 高性能扫描所有 MonoImage
 pub fn find_all_images(process: &ProcessHandle) -> Vec<MonoImageInfo> {
     let mut images = Vec::new();
     let mut addr: usize = 0x00010000;
@@ -25,69 +23,112 @@ pub fn find_all_images(process: &ProcessHandle) -> Vec<MonoImageInfo> {
     while addr < 0x7FFFFFFF {
         let mbi = match query_memory_info(process, addr) {
             Ok(m) => m,
-            Err(_) => { addr += 0x10000; continue; }
+            Err(_) => {
+                addr += 0x10000;
+                continue;
+            }
         };
 
-        // 只看已提交、可读的内存页
-        let is_committed = mbi.State == 0x1000; // MEM_COMMIT
-        let is_readable = (mbi.Protect & 0x02) != 0 || (mbi.Protect & 0x04) != 0;
         let start = mbi.BaseAddress as usize;
         let size = mbi.RegionSize;
+        let committed = mbi.State == 0x1000;
+        let readable = (mbi.Protect & 0x02) != 0 || (mbi.Protect & 0x04) != 0;
 
-        if is_committed && is_readable {
-            let mut offset = 0usize;
-            while offset + MONO_IMAGE_NAME_OFF + 4 < size {
-                let scan_addr = start + offset;
-                
-                // 读取 +0x1C 处的指针
-                if let Ok(name_ptr) = process.read_memory::<u32>(scan_addr + MONO_IMAGE_NAME_OFF) {
-                    if (0x00010000..0x7FFFFFFF).contains(&name_ptr) {
-                        // 读名称字符串
-                        if let Ok(bytes) = process.read_bytes(name_ptr as usize, 32) {
-                            let len = bytes.iter().position(|&b| b == 0).unwrap_or(32);
-                            if len >= 3 {
-                                let name = String::from_utf8_lossy(&bytes[..len]).to_string();
-                                
-                                // 检查是否是有效的 MonoImage 名称
-                                if let Ok(file_ptr) = process.read_memory::<u32>(scan_addr + MONO_IMAGE_FILE_OFF) {
-                                    if (0x00010000..0x7FFFFFFF).contains(&file_ptr) {
-                                        if let Ok(fbytes) = process.read_bytes(file_ptr as usize, 32) {
-                                            let flen = fbytes.iter().position(|&b| b == 0).unwrap_or(32);
-                                            let filename = String::from_utf8_lossy(&fbytes[..flen]).to_string();
-                                            
-                                            // 验证：名称应包含有效字符
-                                            let valid = name.len() > 2 && !name.contains('\u{FFFD}') 
-                                                && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '_');
-                                            
-                                            if valid && (filename.ends_with(".dll") || name.contains("Assembly") || name.contains("mscorlib")) {
-                                                images.push(MonoImageInfo {
-                                                    address: scan_addr,
-                                                    name,
-                                                    filename,
-                                                });
-                                                offset += 0x10; // skip some to avoid duplicates
-                                                continue;
-                                            }
-                                        }
-                                    }
+        if committed && readable && size > 0 && size < 0x1000000 {
+            // 分块读取（每块 64KB）
+            let chunk_size: usize = 0x10000;
+            let mut chunk_off = 0usize;
+
+            while chunk_off < size {
+                let read_size = chunk_size.min(size - chunk_off);
+                let chunk_data = match process.read_bytes(start + chunk_off, read_size) {
+                    Ok(d) => d,
+                    Err(_) => {
+                        chunk_off += chunk_size;
+                        continue;
+                    }
+                };
+
+                // 在块内扫描 4 字节对齐的地址
+                for i in (0..chunk_data.len().saturating_sub(NAME_OFF + 8)).step_by(4) {
+                    // 读取 +0x1C 处的指针 (小端序 u32)
+                    let name_ptr = u32::from_le_bytes([
+                        chunk_data[i + NAME_OFF],
+                        chunk_data[i + NAME_OFF + 1],
+                        chunk_data[i + NAME_OFF + 2],
+                        chunk_data[i + NAME_OFF + 3],
+                    ]) as usize;
+
+                    if !(0x00010000..0x7FFFFFFF).contains(&name_ptr) {
+                        continue;
+                    }
+
+                    // 读取 +0x20 处的文件名字段
+                    let file_ptr = u32::from_le_bytes([
+                        chunk_data[i + FILE_OFF],
+                        chunk_data[i + FILE_OFF + 1],
+                        chunk_data[i + FILE_OFF + 2],
+                        chunk_data[i + FILE_OFF + 3],
+                    ]) as usize;
+
+                    if !(0x00010000..0x7FFFFFFF).contains(&file_ptr) {
+                        continue;
+                    }
+
+                    // 读名称（直接从远程读，因为指针指向的数据不在当前块内）
+                    if let Ok(nbytes) = process.read_bytes(name_ptr, 48) {
+                        let nlen = nbytes.iter().position(|&b| b == 0).unwrap_or(48);
+                        if nlen < 3 {
+                            continue;
+                        }
+                        let name = String::from_utf8_lossy(&nbytes[..nlen]).to_string();
+                        if name.contains('\u{FFFD}') {
+                            continue;
+                        }
+
+                        // 读文件名
+                        if let Ok(fbytes) = process.read_bytes(file_ptr, 48) {
+                            let flen = fbytes.iter().position(|&b| b == 0).unwrap_or(48);
+                            let filename = String::from_utf8_lossy(&fbytes[..flen]).to_string();
+
+                            // 验证：必须是 MonoImage（有合理的名称和文件名）
+                            let is_valid = name.chars().all(|c| {
+                                c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '_'
+                            }) && (filename.ends_with(".dll")
+                                || name.contains("Assembly")
+                                || name.contains("mscorlib"));
+
+                            if is_valid {
+                                let abs_addr = start + chunk_off + i;
+                                // 去重
+                                if !images.iter().any(|x: &MonoImageInfo| x.address == abs_addr) {
+                                    images.push(MonoImageInfo {
+                                        address: abs_addr,
+                                        name,
+                                        filename,
+                                    });
                                 }
                             }
                         }
                     }
                 }
-                offset += 4;
+                chunk_off += chunk_size;
             }
         }
 
-        // 移到下一个内存区域
-        addr = if mbi.RegionSize > 0 { start + size } else { addr + 0x10000 };
+        addr = start + size;
+        if size == 0 {
+            addr += 0x10000;
+        }
     }
 
     images
 }
 
-/// 从名称字符串反查 MonoImage（更精确的定位）
-pub fn find_image_by_name(process: &ProcessHandle, target_name: &str) -> Option<MonoImageInfo> {
+/// 按名称找
+pub fn find_image_by_name(process: &ProcessHandle, target: &str) -> Option<MonoImageInfo> {
     let images = find_all_images(process);
-    images.into_iter().find(|img| img.name == target_name || img.filename.starts_with(target_name))
+    images
+        .into_iter()
+        .find(|i| i.name == target || i.filename.starts_with(target))
 }
