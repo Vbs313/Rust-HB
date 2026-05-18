@@ -25,7 +25,9 @@ pub mod mappers;
 pub mod mono_class;
 pub mod mono_image;
 pub mod mono_runtime;
+pub mod mono_structs;
 pub mod scanner;
+pub mod class_cache;
 
 use hb_core::win32::ProcessHandle;
 
