@@ -33,8 +33,6 @@ extern "system" { fn GetCurrentProcessId() -> DWORD; fn CreateToolhelp32Snapshot
 static mut FN_ROOT: isize = 0;      // mono_get_root_domain
 static mut FN_CORLIB: isize = 0;    // mono_get_corlib
 static mut FN_THREAD_ATTACH: isize = 0; // mono_thread_attach
-static mut FN_VALUE_BOX: isize = 0;    // mono_value_box
-static mut INT32_CLASS: MonoClass = 0;  // System.Int32 for boxing
 static mut FN_CFN: isize = 0;       // mono_class_from_name
 static mut FN_ASM_FOREACH: isize = 0; // mono_assembly_foreach
 static mut FN_ASM_IMAGE: isize = 0;   // mono_assembly_get_image
@@ -77,7 +75,7 @@ unsafe fn init_mono() {
     FN_CLASS_NAME = get("mono_class_get_name");
     FN_GET_METHOD = get("mono_class_get_method_from_name");
     FN_INVOKE = get("mono_runtime_invoke");
-    FN_VALUE_BOX = get("mono_value_box");
+    
     FN_THREAD_ATTACH = get("mono_thread_attach");
     if FN_ROOT != 0 && FN_CORLIB != 0 { MONO_READY = true; }
 }
@@ -181,128 +179,6 @@ unsafe fn call_static_obj(klass: MonoClass, method_name: &str) -> MonoObject {
     invoke(method, 0, std::ptr::null_mut(), std::ptr::null_mut())
 }
 
-/// Box an integer value for passing as method parameter
-unsafe fn box_int(val: i32) -> MonoObject {
-    if FN_VALUE_BOX == 0 || FN_ROOT == 0 { return 0; }
-    // Get System.Int32 class if not cached
-    let mut i32c = INT32_CLASS;
-    if i32c == 0 {
-        if FN_CORLIB == 0 || FN_CFN == 0 { return 0; }
-        let cl: extern "C" fn() -> MonoImage = std::mem::transmute(FN_CORLIB);
-        let cf: extern "C" fn(MonoImage, *const i8, *const i8) -> MonoClass = std::mem::transmute(FN_CFN);
-        i32c = cf(cl(), c"System".as_ptr() as *const i8, c"Int32".as_ptr() as *const i8);
-        if i32c != 0 { INT32_CLASS = i32c; }
-    }
-    if i32c == 0 { return 0; }
-    let bf: extern "C" fn(MonoDomain, MonoClass, *const i32) -> MonoObject = std::mem::transmute(FN_VALUE_BOX);
-    let rf: extern "C" fn() -> MonoDomain = std::mem::transmute(FN_ROOT);
-    bf(rf(), i32c, &val as *const i32)
-}
-
-/// Call Entity.GetTag(int) via mono_runtime_invoke
-unsafe fn call_tag(entity: MonoObject, tag_id: i32) -> Option<i32> {
-    if FN_GET_METHOD == 0 || FN_INVOKE == 0 || FN_VALUE_BOX == 0 { return None; }
-    let ec = find_class("Entity"); if ec == 0 { return None; }
-    let gm: extern "C" fn(MonoClass, *const i8, i32) -> MonoMethod = std::mem::transmute(FN_GET_METHOD);
-    let iv: extern "C" fn(MonoMethod, MonoObject, *mut MonoObject, *mut MonoObject) -> MonoObject = std::mem::transmute(FN_INVOKE);
-    let sn = std::ffi::CString::new("GetTag").unwrap();
-    let mt = gm(ec, sn.as_ptr() as *const i8, -1); if mt == 0 { return None; }
-    let boxed = box_int(tag_id); if boxed == 0 { return None; }
-    let params = [boxed];
-    let r = iv(mt, entity, params.as_ptr() as *mut MonoObject, std::ptr::null_mut());
-    if r == 0 { return None; }
-    Some(*((r + 4) as *const i32))
-}
-
-/// Call method returning string on an entity (like GetCardId)
-unsafe fn call_entity_string(entity: MonoObject, method: &str) -> String {
-    if FN_GET_METHOD == 0 || FN_INVOKE == 0 { return String::new(); }
-    let ec = find_class("Entity"); if ec == 0 { return String::new(); }
-    let gm: extern "C" fn(MonoClass, *const i8, i32) -> MonoMethod = std::mem::transmute(FN_GET_METHOD);
-    let iv: extern "C" fn(MonoMethod, MonoObject, *mut MonoObject, *mut MonoObject) -> MonoObject = std::mem::transmute(FN_INVOKE);
-    let sn = std::ffi::CString::new(method).unwrap();
-    let mt = gm(ec, sn.as_ptr() as *const i8, -1); if mt == 0 { return String::new(); }
-    let r = iv(mt, entity, std::ptr::null_mut(), std::ptr::null_mut());
-    if r == 0 { return String::new(); }
-    // Mono string: offset +0x00 = vtable, +0x04 = length, +0x08 = chars
-    let len = *((r + 4) as *const i32);
-    let chars = (r + 8) as *const u16;
-    let slice = std::slice::from_raw_parts(chars, len as usize);
-    String::from_utf16_lossy(slice)
-}
-
-/// Build entity data JSON from an entity object
-unsafe fn entity_json(entity: MonoObject, is_card: bool) -> String {
-    let mut card_id = String::new();
-    if is_card {
-        let c = call_entity_string(entity, "GetCardId");
-        if !c.is_empty() { card_id = c; }
-    }
-    let eid = match call_tag(entity, 53) { Some(v) => v, None => 0 }; // TAG_ENTITY_ID
-    let health = match call_tag(entity, 45) { Some(v) => v - call_tag(entity, 44).unwrap_or(0), None => 0 };
-    let attack = match call_tag(entity, 47) { Some(v) => v, None => 0 };
-    let cost = if is_card { match call_tag(entity, 48) { Some(v) => v, None => 0 } } else { 0 };
-    let armor = match call_tag(entity, 292) { Some(v) => v, None => 0 };
-    let taunt = match call_tag(entity, 190) { Some(v) => v > 0, None => false };
-    let ds = match call_tag(entity, 194) { Some(v) => v > 0, None => false };
-    let stealth = match call_tag(entity, 191) { Some(v) => v > 0, None => false };
-    let poisonous = match call_tag(entity, 363) { Some(v) => v > 0, None => false };
-    let lifesteal = match call_tag(entity, 372) { Some(v) => v > 0, None => false };
-    let exhausted = match call_tag(entity, 43) { Some(v) => v > 0, None => false };
-    let num_atk = match call_tag(entity, 297) { Some(v) => v, None => 0 };
-    let ctype = if is_card { match call_tag(entity, 202) { Some(4) => "Minion", Some(5) => "Spell", Some(7) => "Weapon", _ => "Other" } } else { "" };
-    
-    if is_card {
-        format!(r#"{{{{"entity_id":{eid},"card_id":"{card_id}","cost":{cost},"attack":{attack},"health":{health},"card_type":"{ctype}"}}}}"#)
-    } else {
-        format!(r#"{{{{"entity_id":{eid},"card_id":"{card_id}","health":{health},"attack":{attack},"armor":{armor},"has_taunt":{taunt},"has_divine_shield":{ds},"has_stealth":{stealth},"has_poisonous":{poisonous},"has_lifesteal":{lifesteal},"is_exhausted":{exhausted},"num_attacks":{num_atk}}}}}"#)
-    }
-}
-
-/// Enumerate entities from GameState to get hand cards and board minions
-unsafe fn enumerate_entities(gs: MonoObject, gs_class: MonoClass) -> (String, String, String) {
-    let mut hand = Vec::<String>::new();
-    let mut own_minions = Vec::<String>::new();
-    let mut enemy_minions = Vec::<String>::new();
-    
-    // Get our controller ID from our player
-    let me = call_static_obj(gs_class, "GetFriendlySidePlayer");
-    let mut my_ctrl = -1i32;
-    if me != 0 {
-        my_ctrl = match call_tag(me, 53) { Some(v) => v, None => -1 }; // use entity_id as controller
-    }
-    
-    // Enumerate entities 4-200
-    let gm: extern "C" fn(MonoClass, *const i8, i32) -> MonoMethod = std::mem::transmute(FN_GET_METHOD);
-    let iv: extern "C" fn(MonoMethod, MonoObject, *mut MonoObject, *mut MonoObject) -> MonoObject = std::mem::transmute(FN_INVOKE);
-    let sn = std::ffi::CString::new("GetEntity").unwrap();
-    let mt = gm(gs_class, sn.as_ptr() as *const i8, -1);
-    
-    if mt != 0 {
-        for eid in 4i32..150 {
-            let boxed_id = box_int(eid);
-            if boxed_id == 0 { break; }
-            let params = [boxed_id];
-            let entity = iv(mt, gs, params.as_ptr() as *mut MonoObject, std::ptr::null_mut());
-            if entity == 0 { break; }
-            
-            let zone = match call_tag(entity, 49) { Some(z) => z, None => continue }; // TAG_ZONE
-            let ctrl = match call_tag(entity, 50) { Some(c) => c, None => continue }; // TAG_CONTROLLER
-            let ctype = match call_tag(entity, 202) { Some(c) => c, None => 0 }; // TAG_CARDTYPE
-            let is_ours = ctrl == my_ctrl || eid % 2 == 1;
-            
-            if zone == 3 && eid > 10 { // HAND
-                hand.push(entity_json(entity, true));
-            } else if zone == 1 && ctype == 4 { // PLAY + MINION
-                let js = entity_json(entity, false);
-                if is_ours { own_minions.push(js); } else { enemy_minions.push(js); }
-            }
-        }
-    }
-    
-    (format!("[{}]", hand.join(",")), format!("[{}]", own_minions.join(",")), format!("[{}]", enemy_minions.join(",")))
-}
-
 unsafe fn find_scene_mgr() -> MonoClass {
     if SCENE_MGR_CLASS != 0 { return SCENE_MGR_CLASS; }
     let cls = find_class("SceneMgr");
@@ -373,55 +249,17 @@ fn read_gs() -> String {
             Some(_) => "OTHER", None => "NoMode"
         };
         
-        let mut turn = 0i32; let mut is_own = false; let mut mana = 0u32;
-        let mut oh_hp=30; let mut oh_atk=0; let mut oh_arm=0;
-        let mut eh_hp=30; let mut eh_atk=0; let mut eh_arm=0;
-        let mut hand_json = String::from("[]");
-        let mut own_min_json = String::from("[]");
-        let mut ene_min_json = String::from("[]");
-        let mut hand_c=0u32; let mut opp_hand_c=0u32; let my_deck=0u32; let op_deck=0u32;
-        
+        let mut turn = 0i32; let mut is_own = false;
         let gs_class = find_class("GameState");
         if gs_class != 0 {
             let gs = call_static_obj(gs_class, "Get");
             if gs != 0 {
-                    if let Some(t) = call_instance_int(gs_class, gs, "GetTurn") { turn = t; }
-                    if let Some(f) = call_instance_int(gs_class, gs, "IsFriendlySidePlayerTurn") { is_own = f > 0; }
-                    if let Some(m) = call_instance_int(gs_class, gs, "GetNumAvailableResources") { mana = m as u32; }
-                    
-                    let _pc = find_class("Player");
-                    let me = call_static_obj(gs_class, "GetFriendlySidePlayer");
-                    let op = call_static_obj(gs_class, "GetOpposingSidePlayer");
-                    
-                    // Heroes via TAGs
-                    if me != 0 {
-                        let hero = call_static_obj(me, "GetHeroCard");
-                        if hero != 0 {
-                            oh_hp = (call_tag(hero,45).unwrap_or(30) - call_tag(hero,44).unwrap_or(0)).max(0);
-                            oh_atk = call_tag(hero,47).unwrap_or(0).max(0);
-                            oh_arm = call_tag(hero,292).unwrap_or(0).max(0);
-                        }
-                    }
-                    if op != 0 {
-                        let hero = call_static_obj(op, "GetHeroCard");
-                        if hero != 0 {
-                            eh_hp = (call_tag(hero,45).unwrap_or(30) - call_tag(hero,44).unwrap_or(0)).max(0);
-                            eh_atk = call_tag(hero,47).unwrap_or(0).max(0);
-                            eh_arm = call_tag(hero,292).unwrap_or(0).max(0);
-                        }
-                    }
-                    
-                    // Enumerate all entities for hand & board
-                    let (hj, omj, emj) = enumerate_entities(gs, gs_class);
-                    hand_json = hj; own_min_json = omj; ene_min_json = emj;
-                    
-                    // Player counts
-                    if let Some(h) = call_instance_int(gs_class, gs, "GetNumCardsInHand") { hand_c = h as u32; }
-                    if let Some(h) = call_instance_int(gs_class, gs, "GetOpponentHandCount") { opp_hand_c = h as u32; }
+                if let Some(t) = call_instance_int(gs_class, gs, "GetTurn") { turn = t; }
+                if let Some(f) = call_instance_int(gs_class, gs, "IsFriendlySidePlayerTurn") { is_own = f > 0; }
             }
         }
         
-        format!(r#"{{"scene":"{scene}","is_own_turn":{is_own},"turn":{turn},"own_mana":{mana},"own_max_mana":10,"own_hero":{{"entity_id":1,"card_id":"HERO_01","health":{oh_hp},"attack":{oh_atk},"armor":{oh_arm},"has_taunt":false,"has_divine_shield":false,"has_stealth":false,"has_poisonous":false,"has_lifesteal":false,"is_exhausted":false,"num_attacks":0}},"enemy_hero":{{"entity_id":2,"card_id":"HERO_02","health":{eh_hp},"attack":{eh_atk},"armor":{eh_arm},"has_taunt":false,"has_divine_shield":false,"has_stealth":false,"has_poisonous":false,"has_lifesteal":false,"is_exhausted":false,"num_attacks":0}},"own_hand":{hand_json},"own_minions":{own_min_json},"enemy_minions":{ene_min_json},"own_hand_count":{hand_c},"enemy_hand_count":{opp_hand_c},"own_deck_count":{my_deck},"enemy_deck_count":{op_deck}}}"#)
+        format!(r#"{{"scene":"{scene}","is_own_turn":{is_own},"turn":{turn}}}"#)
     }
 }
 
