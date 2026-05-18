@@ -67,3 +67,86 @@ impl EnemyTurnSimulator {
         threat
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ai::AiConfig;
+
+    fn empty_pf() -> Playfield {
+        Playfield::new()
+    }
+
+    #[test]
+    fn test_no_enemy_threat() {
+        let simulator = EnemyTurnSimulator;
+        let config = AiConfig::default();
+        let pf = empty_pf();
+        let threat = simulator.simulate(&pf, &config);
+        assert_eq!(threat, 0.0, "Empty board should have 0 threat");
+    }
+
+    #[test]
+    fn test_enemy_minion_threat() {
+        let simulator = EnemyTurnSimulator;
+        let config = AiConfig::default();
+        let mut pf = empty_pf();
+
+        pf.enemy_minions.push(crate::minion::Minion::new_minion(1, 3, 3));
+        pf.enemy_minions[0].entity_id = 100;
+
+        let threat = simulator.simulate(&pf, &config);
+        assert!(threat > 0.0, "Enemy minion should contribute threat");
+        assert!(threat < 20.0, "A 3/3 shouldn't be that threatening");
+    }
+
+    #[test]
+    fn test_charge_minion_higher_threat() {
+        let simulator = EnemyTurnSimulator;
+        let config = AiConfig::default();
+        let mut pf_normal = empty_pf();
+        let mut pf_charge = empty_pf();
+
+        pf_normal.enemy_minions.push(crate::minion::Minion::new_minion(1, 3, 3));
+        pf_normal.enemy_minions[0].entity_id = 100;
+
+        pf_charge.enemy_minions.push(crate::minion::Minion::new_minion(1, 3, 3));
+        pf_charge.enemy_minions[0].entity_id = 101;
+        pf_charge.enemy_minions[0].charge = true;
+
+        let normal = simulator.simulate(&pf_normal, &config);
+        let charge = simulator.simulate(&pf_charge, &config);
+        assert!(charge > normal, "Charge minion should be more threatening");
+    }
+
+    #[test]
+    fn test_weapon_threat() {
+        let simulator = EnemyTurnSimulator;
+        let config = AiConfig::default();
+        let mut pf = empty_pf();
+
+        pf.enemy_weapon = Some(crate::weapon::Weapon {
+            angr: 5,
+            durability: 2,
+            ..Default::default()
+        });
+
+        let threat = simulator.simulate(&pf, &config);
+        assert!(threat > 0.0, "Enemy weapon should contribute threat");
+    }
+
+    #[test]
+    fn test_poisonous_additional_threat() {
+        let simulator = EnemyTurnSimulator;
+        let config = AiConfig::default();
+        let mut pf = empty_pf();
+
+        pf.enemy_minions.push(crate::minion::Minion::new_minion(1, 1, 1));
+        pf.enemy_minions[0].entity_id = 100;
+        pf.enemy_minions[0].poisonous = true;
+
+        let threat = simulator.simulate(&pf, &config);
+        // 1/1 基础威胁 = 1，剧毒 +5，总计约 6
+        assert!(threat > 5.0, "Poisonous minion threat should include poison bonus");
+    }
+}

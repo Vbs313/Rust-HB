@@ -11,6 +11,12 @@ pub struct RoutineManager {
     active_routine: Option<String>,
 }
 
+impl Default for RoutineManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl RoutineManager {
     pub fn new() -> Self {
         Self { routines: DashMap::new(), active_routine: None }

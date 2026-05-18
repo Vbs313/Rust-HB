@@ -78,6 +78,65 @@ impl Rect {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_rect_dimensions() {
+        let r = Rect { left: 100, top: 200, right: 400, bottom: 500 };
+        assert_eq!(r.width(), 300);
+        assert_eq!(r.height(), 300);
+    }
+
+    #[test]
+    fn test_rect_zero() {
+        let r = Rect { left: 0, top: 0, right: 0, bottom: 0 };
+        assert_eq!(r.width(), 0);
+        assert_eq!(r.height(), 0);
+    }
+
+    #[test]
+    fn test_rect_negative_coordinates() {
+        let r = Rect { left: -100, top: -200, right: 100, bottom: 200 };
+        assert_eq!(r.width(), 200);
+        assert_eq!(r.height(), 400);
+    }
+
+    #[test]
+    fn test_hearthstone_window_creation() {
+        let hw = HearthstoneWindow {
+            pid: 1234,
+            hwnd: std::ptr::null_mut(),
+            title: "Hearthstone".to_string(),
+            rect: Some(Rect { left: 0, top: 0, right: 1920, bottom: 1080 }),
+        };
+        assert_eq!(hw.pid, 1234);
+        assert_eq!(hw.title, "Hearthstone");
+        assert!(hw.rect.is_some());
+        assert_eq!(hw.rect.unwrap().width(), 1920);
+    }
+
+    #[test]
+    fn test_process_error_display() {
+        let err = ProcessError::NoWindowFound;
+        assert_eq!(format!("{err}"), "No Hearthstone window found");
+
+        let err = ProcessError::EnumFailed("access denied".to_string());
+        assert!(format!("{err}").contains("access denied"));
+
+        let err = ProcessError::AttachFailed("timeout".to_string());
+        assert!(format!("{err}").contains("timeout"));
+    }
+
+    #[test]
+    fn test_process_error_debug() {
+        let err = ProcessError::WindowError("failed".to_string());
+        let debug = format!("{err:?}");
+        assert!(debug.contains("WindowError"));
+    }
+}
+
 // ============================================================
 // 进程管理器
 // ============================================================
@@ -85,6 +144,12 @@ impl Rect {
 /// 进程管理器
 pub struct ProcessManager {
     windows: Vec<HearthstoneWindow>,
+}
+
+impl Default for ProcessManager {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ProcessManager {

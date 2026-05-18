@@ -115,6 +115,66 @@ fn check_dialog_by_class(_mono: &MonoBridge, _class_name: &str) -> Result<bool, 
     Ok(false)
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_game_scene_variants() {
+        let scenes = [
+            GameScene::Login,
+            GameScene::Hub,
+            GameScene::Tournament,
+            GameScene::Battlegrounds,
+            GameScene::Arena,
+            GameScene::Adventure,
+            GameScene::TavernBrawl,
+            GameScene::Mercenaries,
+            GameScene::Gameplay,
+            GameScene::Unknown,
+        ];
+        assert_eq!(scenes.len(), 10);
+    }
+
+    #[test]
+    fn test_dialog_type_variants() {
+        let dialogs = [
+            DialogType::GamemodeSelection,
+            DialogType::CardBackSelection,
+            DialogType::DeckPicker,
+            DialogType::Reward,
+            DialogType::LevelUp,
+            DialogType::OpenPack,
+            DialogType::QuestDialog,
+            DialogType::OkDialog,
+            DialogType::YesNoDialog,
+            DialogType::ChooseOneDialog,
+            DialogType::GenericPopup,
+            DialogType::AdventureSelect,
+            DialogType::TavernBrawlSelect,
+            DialogType::BgsHeroSelect,
+            DialogType::BgsQuestSelect,
+            DialogType::BgsReward,
+            DialogType::BgsTriplesBoard,
+            DialogType::BgsTeammateBoard,
+            DialogType::ArenaDraft,
+            DialogType::ArenaReward,
+            DialogType::ArenaScore,
+            DialogType::MercenariesTask,
+            DialogType::MercenariesReward,
+        ];
+        assert_eq!(dialogs.len(), 23);
+        // all distinct
+        for i in 0..dialogs.len() {
+            for j in i+1..dialogs.len() {
+                assert_ne!(dialogs[i], dialogs[j]);
+            }
+        }
+    }
+
+    // detect_scene 和 detect_active_dialog 需要真实 Mono 连接外部进程，跳过测试
+}
+
 /// 弹窗类型
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DialogType {

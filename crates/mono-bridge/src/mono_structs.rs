@@ -37,47 +37,71 @@ pub fn find_class_by_name(process: &ProcessHandle, class_name: &str) -> Option<M
 
     // 尝试的 name 偏移和对应的 namespace 偏移
     let tries: &[(usize, usize)] = &[
-        (0x08, 0x0C),  // 标准 MonoClass layout
-        (0x0C, 0x10),  // 变体1
-        (0x10, 0x14),  // 变体2
-        (0x04, 0x08),  // 变体3
+        (0x08, 0x0C), // 标准 MonoClass layout
+        (0x0C, 0x10), // 变体1
+        (0x10, 0x14), // 变体2
+        (0x04, 0x08), // 变体3
     ];
-    
+
     // 扫描范围：前后各 0x10000 字节
     let scan_start = name_addr.saturating_sub(0x10000);
     let scan_end = name_addr.saturating_add(0x10000).min(0x7FFFFFFF);
-    
+
     for &(name_off, ns_off) in tries {
         for candidate in (scan_start..scan_end).step_by(4) {
-            let Ok(ptr) = process.read_memory::<u32>(candidate + name_off) else { continue };
-            if ptr as usize != name_addr { continue; }
-            
+            let Ok(ptr) = process.read_memory::<u32>(candidate + name_off) else {
+                continue;
+            };
+            if ptr as usize != name_addr {
+                continue;
+            }
+
             // Namespace
-            let Ok(ns_ptr) = process.read_memory::<u32>(candidate + ns_off) else { continue };
-            if !(0x00010000..0x7FFFFFFF).contains(&ns_ptr) { continue; }
-            let Ok(nbytes) = process.read_bytes(ns_ptr as usize, 48) else { continue };
+            let Ok(ns_ptr) = process.read_memory::<u32>(candidate + ns_off) else {
+                continue;
+            };
+            if !(0x00010000..0x7FFFFFFF).contains(&ns_ptr) {
+                continue;
+            }
+            let Ok(nbytes) = process.read_bytes(ns_ptr as usize, 48) else {
+                continue;
+            };
             let nlen = nbytes.iter().position(|&b| b == 0).unwrap_or(48);
-            if nlen == 0 || nlen >= 40 { continue; }
+            if nlen == 0 || nlen >= 40 {
+                continue;
+            }
             let ns = String::from_utf8_lossy(&nbytes[..nlen]);
-            if ns.contains('\u{FFFD}') { continue; }
-            
+            if ns.contains('\u{FFFD}') {
+                continue;
+            }
+
             // Image (尝试两个偏移)
             let img0: u32 = process.read_memory(candidate).unwrap_or(0);
             let img4: u32 = process.read_memory(candidate + 4).unwrap_or(0);
-            let image_addr = if (0x00010000..0x7FFFFFFF).contains(&img0) { img0 as usize }
-                else if (0x00010000..0x7FFFFFFF).contains(&img4) { img4 as usize }
-                else { continue; };
-            
+            let image_addr = if (0x00010000..0x7FFFFFFF).contains(&img0) {
+                img0 as usize
+            } else if (0x00010000..0x7FFFFFFF).contains(&img4) {
+                img4 as usize
+            } else {
+                continue;
+            };
+
             let class_size = process.read_memory::<u32>(candidate + 0x2C).unwrap_or(0);
             let field_count = process.read_memory::<u32>(candidate + 0x34).unwrap_or(0);
             let fields_addr = process.read_memory::<u32>(candidate + 0x38).unwrap_or(0) as usize;
             let parent_addr = process.read_memory::<u32>(candidate + 0x10).unwrap_or(0) as usize;
-            
+
             eprintln!("    Candidate @ 0x{candidate:x} name_off=0x{name_off:x} ns='{ns}' img=0x{image_addr:x}");
-            
+
             return Some(MonoClassInfo {
-                address: candidate, name: class_name.to_string(), namespace: ns.to_string(),
-                class_size, image_addr, field_count, fields_addr, parent_addr,
+                address: candidate,
+                name: class_name.to_string(),
+                namespace: ns.to_string(),
+                class_size,
+                image_addr,
+                field_count,
+                fields_addr,
+                parent_addr,
             });
         }
     }

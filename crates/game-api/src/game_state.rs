@@ -180,6 +180,162 @@ fn detect_current_player(_mono: &MonoBridge, state: &GameState) -> bool {
     own > enemy
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_zone_from_i32() {
+        assert_eq!(Zone::from_i32(0), Zone::Invalid);
+        assert_eq!(Zone::from_i32(1), Zone::Play);
+        assert_eq!(Zone::from_i32(2), Zone::Deck);
+        assert_eq!(Zone::from_i32(3), Zone::Hand);
+        assert_eq!(Zone::from_i32(4), Zone::Graveyard);
+        assert_eq!(Zone::from_i32(5), Zone::RemovedFromGame);
+        assert_eq!(Zone::from_i32(6), Zone::Setaside);
+        assert_eq!(Zone::from_i32(7), Zone::Secret);
+        assert_eq!(Zone::from_i32(42), Zone::Invalid);
+    }
+
+    #[test]
+    fn test_entity_empty() {
+        let e = Entity::empty();
+        assert_eq!(e.entity_id, 0);
+        assert_eq!(e.address, 0);
+        assert_eq!(e.card_id, "");
+        assert!(e.tags.is_empty());
+    }
+
+    #[test]
+    fn test_entity_get_tag() {
+        let e = Entity {
+            tags: vec![
+                (44, 5),  // TAG_DAMAGE
+                (45, 30), // TAG_HEALTH
+                (47, 3),  // TAG_ATK
+                (48, 2),  // TAG_COST
+            ],
+            ..Entity::empty()
+        };
+        assert_eq!(e.get_tag(TAG_DAMAGE), 5);
+        assert_eq!(e.get_tag(TAG_HEALTH), 30);
+        assert_eq!(e.get_tag(TAG_ATK), 3);
+        assert_eq!(e.get_tag(TAG_COST), 2);
+        assert_eq!(e.get_tag(TAG_ZONE), 0, "Missing tag should return 0");
+    }
+
+    #[test]
+    fn test_entity_is_hero() {
+        let mut e = Entity::empty();
+        // TAG_CARDTYPE = 202, CARDTYPE_HERO = 3
+        assert!(!e.is_hero(), "Empty entity is not a hero");
+        e.tags.push((202, 3));
+        assert!(e.is_hero());
+    }
+
+    #[test]
+    fn test_entity_is_minion() {
+        let mut e = Entity::empty();
+        assert!(!e.is_minion());
+        e.tags.push((202, 4));
+        assert!(e.is_minion());
+    }
+
+    #[test]
+    fn test_entity_is_weapon() {
+        let mut e = Entity::empty();
+        assert!(!e.is_weapon());
+        e.tags.push((202, 7));
+        assert!(e.is_weapon());
+    }
+
+    #[test]
+    fn test_entity_is_spell() {
+        let mut e = Entity::empty();
+        assert!(!e.is_spell());
+        e.tags.push((202, 5));
+        assert!(e.is_spell());
+    }
+
+    #[test]
+    fn test_entity_type_mutual_exclusive() {
+        let mut e = Entity::empty();
+        e.tags.push((202, 3)); // hero
+        assert!(e.is_hero());
+        assert!(!e.is_minion());
+        assert!(!e.is_weapon());
+        assert!(!e.is_spell());
+    }
+
+    #[test]
+    fn test_game_state_empty() {
+        let state = GameState::empty(GameScene::Unknown);
+        assert_eq!(state.scene, GameScene::Unknown);
+        assert_eq!(state.own_mana, 0);
+        assert_eq!(state.own_hand.len(), 0);
+        assert_eq!(state.own_minions.len(), 0);
+        assert!(state.own_weapon.is_none());
+        assert!(!state.is_own_turn);
+    }
+
+    #[test]
+    fn test_game_state_classify_entities() {
+        let mut state = GameState::empty(GameScene::Gameplay);
+
+        let hero = Entity {
+            entity_id: 1,
+            tags: vec![(202, 3)], // hero
+            ..Entity::empty()
+        };
+        let enemy_hero = Entity {
+            entity_id: 2,
+            tags: vec![(202, 3)], // hero
+            ..Entity::empty()
+        };
+        let minion_on_board = Entity {
+            entity_id: 3,
+            tags: vec![(50, 1), (49, 1), (202, 4)], // controller=1, zone=Play, type=Minion
+            ..Entity::empty()
+        };
+        let weapon = Entity {
+            entity_id: 4,
+            tags: vec![(50, 1), (49, 1), (202, 7)], // weapon in play
+            ..Entity::empty()
+        };
+
+        // 手动分类
+        state.own_hero = hero.clone();
+        state.enemy_hero = enemy_hero;
+        state.own_minions.push(minion_on_board);
+        state.own_weapon = Some(weapon);
+
+        assert_eq!(state.own_hero.entity_id, 1);
+        assert_eq!(state.own_minions.len(), 1);
+        assert!(state.own_weapon.is_some());
+    }
+
+    #[test]
+    fn test_tag_constants() {
+        assert_eq!(TAG_PLAYER_ID, 30);
+        assert_eq!(TAG_ZONE, 49);
+        assert_eq!(TAG_CARDTYPE, 202);
+        assert_eq!(TAG_HEALTH, 45);
+        assert_eq!(TAG_ATK, 47);
+        assert_eq!(TAG_COST, 48);
+        assert_eq!(TAG_DURABILITY, 187);
+        assert_eq!(TAG_DAMAGE, 44);
+        assert_eq!(TAG_TAUNT, 190);
+        assert_eq!(TAG_DIVINE_SHIELD, 194);
+        assert_eq!(TAG_STEALTH, 191);
+        assert_eq!(TAG_WINDFURY, 189);
+        assert_eq!(TAG_POISONOUS, 363);
+        assert_eq!(TAG_NUM_ATTACKS, 297);
+        assert_eq!(TAG_FROZEN, 260);
+    }
+
+    // detect_current_player 需要 MonoBridge 实例（外部 crate），集成测试覆盖
+}
+
 // ============================================================
 // 游戏 TAG 常量（对应 C# 的 GAME_TAG 枚举值）
 // ============================================================

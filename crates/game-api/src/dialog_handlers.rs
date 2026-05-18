@@ -27,6 +27,12 @@ pub struct DialogHandlerManager {
     handlers: Vec<Box<dyn DialogHandler>>,
 }
 
+impl Default for DialogHandlerManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DialogHandlerManager {
     pub fn new() -> Self {
         Self {

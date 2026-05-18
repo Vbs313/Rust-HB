@@ -118,3 +118,62 @@ impl Ai {
         )
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::action::ActionType;
+
+    #[test]
+    fn test_ai_config_default() {
+        let config = AiConfig::default();
+        assert_eq!(config.max_depth, 12);
+        assert_eq!(config.max_wide, 3000);
+        assert_eq!(config.max_cal, 60);
+        assert!(config.simulate_next_turn);
+        assert!(!config.use_lethal_check);
+    }
+
+    #[test]
+    fn test_ai_new() {
+        let ai = Ai::new();
+        assert_eq!(ai.config.max_depth, 12);
+        assert_eq!(ai.behavior.name(), "Default (Balanced)");
+    }
+
+    #[test]
+    fn test_ai_set_behavior() {
+        let mut ai = Ai::new();
+        ai.set_behavior(Box::new(crate::behavior::rush_behavior::RushBehavior));
+        assert_eq!(ai.behavior.name(), "Rush (Aggro)");
+    }
+
+    #[test]
+    fn test_ai_do_something_with_empty_board() {
+        let ai = Ai::new();
+        let pf = Playfield::new();
+        let result = ai.do_something(&pf);
+        // 空局面应该至少给出 EndTurn
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().action_type, ActionType::EndTurn);
+    }
+
+    #[test]
+    fn test_ai_config_clone() {
+        let c1 = AiConfig {
+            max_depth: 6,
+            max_wide: 500,
+            max_cal: 30,
+            simulate_next_turn: false,
+            next_turn_depth: 2,
+            next_turn_wide: 10,
+            enemy_turn_wide: 20,
+            enemy_turn_wide_second: 50,
+            use_lethal_check: true,
+        };
+        let c2 = c1.clone();
+        assert_eq!(c1.max_depth, c2.max_depth);
+        assert_eq!(c1.max_wide, c2.max_wide);
+        assert_eq!(c1.use_lethal_check, c2.use_lethal_check);
+    }
+}

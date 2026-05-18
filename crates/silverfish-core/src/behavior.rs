@@ -191,3 +191,137 @@ pub mod control_behavior {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn empty_board() -> Playfield {
+        Playfield::new()
+    }
+
+    fn board_with_our_minion() -> Playfield {
+        let mut pf = Playfield::new();
+        pf.mana = 5;
+        pf.is_own_turn = true;
+        pf.own_hero.hp = 30;
+        pf.enemy_hero.hp = 25;
+        pf.own_hero.entity_id = 1;
+        pf.enemy_hero.entity_id = 2;
+        pf.summon_minion(1001, 0, true);
+        pf.own_minions[0].angr = 3;
+        pf.own_minions[0].hp = 3;
+        pf.own_minions[0].ready = true;
+        pf
+    }
+
+    #[test]
+    fn test_default_behavior_empty() {
+        let pf = empty_board();
+        let v = default_behavior::DefaultBehavior.evaluate(&pf);
+        // 空局面：双方英雄 30/30，无手牌
+        // 30*2 - 30*2 + 0 = 0
+        assert_eq!(v, 0.0);
+    }
+
+    #[test]
+    fn test_default_behavior_our_minion_advantage() {
+        let pf = board_with_our_minion();
+        let v = default_behavior::DefaultBehavior.evaluate(&pf);
+        // 我方有 3/3，敌方无随从 = 正数
+        assert!(v > 0.0);
+    }
+
+    #[test]
+    fn test_default_behavior_lethal() {
+        let mut pf = board_with_our_minion();
+        pf.enemy_hero.hp = 0;
+        pf.enemy_hero.armor = 0;
+        let v = default_behavior::DefaultBehavior.evaluate(&pf);
+        assert!(v > 5000.0, "Lethal should give very high score");
+    }
+
+    #[test]
+    fn test_default_behavior_enemy_lethal_us() {
+        let mut pf = board_with_our_minion();
+        pf.own_hero.hp = 0;
+        let v = default_behavior::DefaultBehavior.evaluate(&pf);
+        assert!(v < -10000.0, "We're dead, should be very negative");
+    }
+
+    #[test]
+    fn test_rush_behavior() {
+        let pf = board_with_our_minion();
+        let rush_v = rush_behavior::RushBehavior.evaluate(&pf);
+        let default_v = default_behavior::DefaultBehavior.evaluate(&pf);
+        assert!(rush_v > default_v, "Rush should value aggro board higher");
+    }
+
+    #[test]
+    fn test_control_behavior() {
+        let mut pf = board_with_our_minion();
+        pf.own_hand.push(crate::playfield::HandCard {
+            card_id: 213,
+            entity_id: 5,
+            position: 0,
+            cost: 4,
+            original_cost: 4,
+            attack: 0,
+            health: 0,
+            card_type: crate::CardType::Spell,
+            race: crate::Race::None,
+            is_choice: false,
+            has_targets: false,
+            is_tradeable: false,
+            is_forge: false,
+        });
+        pf.own_hand.push(crate::playfield::HandCard {
+            card_id: 602,
+            entity_id: 6,
+            position: 1,
+            cost: 2,
+            original_cost: 2,
+            attack: 1,
+            health: 3,
+            card_type: crate::CardType::Minion,
+            race: crate::Race::None,
+            is_choice: false,
+            has_targets: false,
+            is_tradeable: false,
+            is_forge: false,
+        });
+
+        let ctrl_v = control_behavior::ControlBehavior.evaluate(&pf);
+        let default_v = default_behavior::DefaultBehavior.evaluate(&pf);
+        // Control 对手牌加权更高 = 总体更高
+        let diff = ctrl_v - default_v;
+        assert!(diff > 0.0, "Control values hand cards more, diff = {diff}");
+    }
+
+    #[test]
+    fn test_behavior_names() {
+        assert_eq!(default_behavior::DefaultBehavior.name(), "Default (Balanced)");
+        assert_eq!(rush_behavior::RushBehavior.name(), "Rush (Aggro)");
+        assert_eq!(control_behavior::ControlBehavior.name(), "Control");
+    }
+
+    #[test]
+    fn test_taunt_bonus() {
+        let mut pf = board_with_our_minion();
+        pf.own_minions[0].taunt = true;
+        let with_taunt = default_behavior::DefaultBehavior.evaluate(&pf);
+        pf.own_minions[0].taunt = false;
+        let without_taunt = default_behavior::DefaultBehavior.evaluate(&pf);
+        assert!(with_taunt > without_taunt, "Taunt should add value");
+    }
+
+    #[test]
+    fn test_divine_shield_bonus() {
+        let mut pf = board_with_our_minion();
+        pf.own_minions[0].divine_shield = true;
+        let with_ds = default_behavior::DefaultBehavior.evaluate(&pf);
+        pf.own_minions[0].divine_shield = false;
+        let without_ds = default_behavior::DefaultBehavior.evaluate(&pf);
+        assert!(with_ds > without_ds, "Divine shield should add value");
+    }
+}

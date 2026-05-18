@@ -31,6 +31,12 @@ pub struct EventManager {
     listeners: RwLock<Vec<(String, EventListener)>>,
 }
 
+impl Default for EventManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl EventManager {
     pub fn new() -> Self {
         Self { listeners: RwLock::new(Vec::new()) }

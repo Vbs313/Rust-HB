@@ -42,6 +42,17 @@ pub struct MonoRuntime {
 }
 
 impl MonoRuntime {
+    /// 创建空测试实例（无真实进程）
+    #[doc(hidden)]
+    pub fn dummy() -> Self {
+        Self {
+            mono_module_base: 0,
+            get_root_domain_addr: 0,
+            root_domain_addr: 0,
+            corlib_addr: 0,
+        }
+    }
+
     /// 在目标进程中查找 Mono 运行时
     pub fn find(process: &ProcessHandle) -> Result<Self, BridgeError> {
         tracing::info!("Searching for Mono runtime in process PID={}", process.pid);

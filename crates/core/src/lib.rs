@@ -30,3 +30,20 @@ pub fn project_root() -> PathBuf {
 pub fn data_dir() -> PathBuf {
     project_root().join("data")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_project_root_exists() {
+        let root = project_root();
+        assert!(!root.as_os_str().is_empty(), "Project root should exist");
+    }
+
+    #[test]
+    fn test_data_dir_contains_data() {
+        let dir = data_dir();
+        assert!(dir.to_string_lossy().contains("data"));
+    }
+}

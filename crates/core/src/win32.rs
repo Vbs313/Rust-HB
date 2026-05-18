@@ -246,10 +246,20 @@ impl ProcessHandle {
     }
 }
 
+impl ProcessHandle {
+    /// 创建空的测试实例（无需真实进程）
+    #[doc(hidden)]
+    pub fn dummy() -> Self {
+        Self { pid: 0, handle: std::ptr::null_mut() }
+    }
+}
+
 impl Drop for ProcessHandle {
     fn drop(&mut self) {
-        unsafe {
-            CloseHandle(self.handle);
+        if !self.handle.is_null() {
+            unsafe {
+                CloseHandle(self.handle);
+            }
         }
     }
 }

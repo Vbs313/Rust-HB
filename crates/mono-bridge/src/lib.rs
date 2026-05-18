@@ -21,13 +21,13 @@
 
 #![allow(non_snake_case, dead_code)]
 
+pub mod class_cache;
 pub mod mappers;
 pub mod mono_class;
 pub mod mono_image;
 pub mod mono_runtime;
 pub mod mono_structs;
 pub mod scanner;
-pub mod class_cache;
 
 use hb_core::win32::ProcessHandle;
 
@@ -52,6 +52,16 @@ impl MonoBridge {
     /// 获取 Mono 运行时引用
     pub fn runtime(&self) -> &mono_runtime::MonoRuntime {
         &self.runtime
+    }
+
+    /// 创建一个空的测试实例（不用真实进程）
+    #[cfg(test)]
+    pub fn dummy() -> Self {
+        use hb_core::win32::ProcessHandle;
+        // 造一个假的 ProcessHandle 用于测试
+        let process = ProcessHandle::dummy();
+        let runtime = mono_runtime::MonoRuntime::dummy();
+        Self { process, runtime }
     }
 }
 

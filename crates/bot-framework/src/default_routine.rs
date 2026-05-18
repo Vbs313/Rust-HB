@@ -13,6 +13,12 @@ pub struct DefaultRoutine {
     description: &'static str,
 }
 
+impl Default for DefaultRoutine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DefaultRoutine {
     pub fn new() -> Self {
         Self {

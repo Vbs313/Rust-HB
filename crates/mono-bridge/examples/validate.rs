@@ -7,8 +7,14 @@ fn main() {
     println!("=== Mono 类枚举 (via class_cache) ===\n");
 
     let p = match ProcessHandle::find_by_name("Hearthstone") {
-        Ok(p) => { println!("✅ PID={}", p.pid); p }
-        Err(e) => { println!("❌ {e}"); return; }
+        Ok(p) => {
+            println!("✅ PID={}", p.pid);
+            p
+        }
+        Err(e) => {
+            println!("❌ {e}");
+            return;
+        }
     };
 
     // Assembly-CSharp MonoImage 地址（从之前扫描获得，每次游戏启动可能变化）
@@ -34,7 +40,13 @@ fn main() {
     use std::collections::HashMap;
     let mut ns_map: HashMap<String, u32> = HashMap::new();
     for c in &classes {
-        *ns_map.entry(if c.namespace.is_empty() { "(global)".into() } else { c.namespace.clone() }).or_insert(0) += 1;
+        *ns_map
+            .entry(if c.namespace.is_empty() {
+                "(global)".into()
+            } else {
+                c.namespace.clone()
+            })
+            .or_insert(0) += 1;
     }
     let mut v: Vec<_> = ns_map.into_iter().collect();
     v.sort_by(|a, b| b.1.cmp(&a.1));
@@ -45,10 +57,20 @@ fn main() {
 
     // 找关键类
     println!("\n关键类搜索:");
-    let targets = ["SceneMgr", "GameState", "Entity", "Player", "GameStateManager", "GameEntity"];
+    let targets = [
+        "SceneMgr",
+        "GameState",
+        "Entity",
+        "Player",
+        "GameStateManager",
+        "GameEntity",
+    ];
     for class in &classes {
         if targets.contains(&class.name.as_str()) {
-            println!("  ✅ {} ({}) @ 0x{:08x}", class.name, class.namespace, class.address);
+            println!(
+                "  ✅ {} ({}) @ 0x{:08x}",
+                class.name, class.namespace, class.address
+            );
             println!("     大小={}B 字段={}", class.class_size, class.field_count);
         }
     }

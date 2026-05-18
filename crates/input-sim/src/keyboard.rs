@@ -234,3 +234,88 @@ fn key_to_scan_code(key: &Key) -> u16 {
         Key::Unknown(sc) => *sc,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_key_scan_codes() {
+        assert_eq!(key_to_scan_code(&Key::Return), 0x1C);
+        assert_eq!(key_to_scan_code(&Key::Escape), 0x01);
+        assert_eq!(key_to_scan_code(&Key::Tab), 0x0F);
+        assert_eq!(key_to_scan_code(&Key::Space), 0x39);
+        assert_eq!(key_to_scan_code(&Key::Backspace), 0x0E);
+    }
+
+    #[test]
+    fn test_letter_scan_codes() {
+        assert_eq!(key_to_scan_code(&Key::A), 0x1E);
+        assert_eq!(key_to_scan_code(&Key::B), 0x30);
+        assert_eq!(key_to_scan_code(&Key::Z), 0x2C);
+        assert_eq!(key_to_scan_code(&Key::W), 0x11);
+        assert_eq!(key_to_scan_code(&Key::S), 0x1F);
+        assert_eq!(key_to_scan_code(&Key::D), 0x20);
+    }
+
+    #[test]
+    fn test_number_scan_codes() {
+        assert_eq!(key_to_scan_code(&Key::Num0), 0x0B);
+        assert_eq!(key_to_scan_code(&Key::Num1), 0x02);
+        assert_eq!(key_to_scan_code(&Key::Num9), 0x0A);
+    }
+
+    #[test]
+    fn test_function_key_codes() {
+        assert_eq!(key_to_scan_code(&Key::F1), 0x3B);
+        assert_eq!(key_to_scan_code(&Key::F5), 0x3F);
+        assert_eq!(key_to_scan_code(&Key::F12), 0x58);
+    }
+
+    #[test]
+    fn test_numpad_codes() {
+        assert_eq!(key_to_scan_code(&Key::Numpad0), 0x52);
+        assert_eq!(key_to_scan_code(&Key::Numpad5), 0x4C);
+        assert_eq!(key_to_scan_code(&Key::Add), 0x4E);
+        assert_eq!(key_to_scan_code(&Key::Divide), 0x35);
+    }
+
+    #[test]
+    fn test_arrow_keys() {
+        assert_eq!(key_to_scan_code(&Key::Up), 0x48);
+        assert_eq!(key_to_scan_code(&Key::Down), 0x50);
+        assert_eq!(key_to_scan_code(&Key::Left), 0x4B);
+        assert_eq!(key_to_scan_code(&Key::Right), 0x4D);
+    }
+
+    #[test]
+    fn test_modifier_keys() {
+        assert_eq!(key_to_scan_code(&Key::Shift), 0x2A);
+        assert_eq!(key_to_scan_code(&Key::Control), 0x1D);
+        assert_eq!(key_to_scan_code(&Key::Alt), 0x38);
+    }
+
+    #[test]
+    fn test_unknown_key() {
+        assert_eq!(key_to_scan_code(&Key::Unknown(0xFF)), 0xFF);
+        assert_eq!(key_to_scan_code(&Key::Unknown(0xAB)), 0xAB);
+    }
+
+    #[test]
+    fn test_all_keys_have_unique_codes() {
+        // Quick sanity: scan codes should be mostly unique
+        let keys = [
+            Key::A, Key::B, Key::C, Key::D, Key::E, Key::F, Key::G,
+            Key::H, Key::I, Key::J, Key::K, Key::L, Key::M, Key::N,
+            Key::O, Key::P, Key::Q, Key::R, Key::S, Key::T, Key::U,
+            Key::V, Key::W, Key::X, Key::Y, Key::Z,
+            Key::Num0, Key::Num1, Key::Num2, Key::Num3, Key::Num4,
+            Key::Num5, Key::Num6, Key::Num7, Key::Num8, Key::Num9,
+        ];
+        let mut codes = std::collections::HashSet::new();
+        for k in &keys {
+            let sc = key_to_scan_code(k);
+            assert!(codes.insert(sc), "Duplicate scan code 0x{sc:02X}");
+        }
+    }
+}

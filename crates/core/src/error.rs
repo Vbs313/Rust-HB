@@ -74,3 +74,61 @@ impl From<toml::de::Error> for Error {
 
 /// 便捷 Result 类型
 pub type Result<T> = std::result::Result<T, Error>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_error_display() {
+        let e = Error::ProcessNotFound("Hearthstone.exe".to_string());
+        assert_eq!(format!("{e}"), "Process not found: Hearthstone.exe");
+
+        let e = Error::Config("missing field".to_string());
+        assert_eq!(format!("{e}"), "Config error: missing field");
+
+        let e = Error::Memory("read failed".to_string());
+        assert_eq!(format!("{e}"), "Memory error: read failed");
+    }
+
+    #[test]
+    fn test_error_debug() {
+        let e = Error::Ai("no actions".to_string());
+        let d = format!("{e:?}");
+        assert!(d.contains("Ai"));
+    }
+
+    #[test]
+    fn test_from_io_error() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "file missing");
+        let e: Error = io_err.into();
+        assert!(format!("{e}").contains("file missing"));
+        assert!(matches!(e, Error::Io(_)));
+    }
+
+    #[test]
+    fn test_error_impl_std_error() {
+        fn check<T: std::error::Error>() {}
+        check::<Error>();
+    }
+
+    #[test]
+    fn test_all_error_variants() {
+        let variants: [Error; 10] = [
+            Error::Io(std::io::Error::new(std::io::ErrorKind::Other, "")),
+            Error::Config("".into()),
+            Error::Serde(serde_json::from_str::<()>("invalid").unwrap_err()),
+            Error::ProcessNotFound("".into()),
+            Error::Memory("".into()),
+            Error::Mono("".into()),
+            Error::Ai("".into()),
+            Error::Auth("".into()),
+            Error::Plugin("".into()),
+            Error::Runtime("".into()),
+        ];
+        for v in &variants {
+            let _ = format!("{v}"); // must not panic
+            let _ = format!("{v:?}"); // must not panic
+        }
+    }
+}

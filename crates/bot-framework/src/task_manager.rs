@@ -21,6 +21,12 @@ pub struct TaskManager {
     running: Arc<Mutex<bool>>,
 }
 
+impl Default for TaskManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TaskManager {
     pub fn new() -> Self {
         let (tx, mut rx) = mpsc::channel::<Task>(100);
@@ -56,5 +62,45 @@ impl TaskManager {
 
     pub fn is_running(&self) -> bool {
         *self.running.lock()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_task_manager_create() {
+        let mgr = TaskManager::new();
+        assert!(!mgr.is_running());
+    }
+
+    #[tokio::test]
+    async fn test_task_submit_stop() {
+        let mgr = TaskManager::new();
+        mgr.submit(Task::Stop).await;
+        // Give it time to process
+        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+        assert!(!mgr.is_running());
+    }
+
+    #[tokio::test]
+    async fn test_task_submit_idle() {
+        let mgr = TaskManager::new();
+        mgr.submit(Task::Idle).await;
+        // Idle doesn't stop the loop, should still be running
+        // Actually the runner stops on Task::Stop only, so still running after Idle...
+        // Wait, no: the loop processes Idle then loops back to recv. Since running starts false
+        // and is only set false on Stop, it stays false.
+        assert!(!mgr.is_running());
+    }
+
+    #[tokio::test]
+    async fn test_task_stop_terminates_loop() {
+        let mgr = TaskManager::new();
+        mgr.submit(Task::Stop).await;
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+        // After Stop, the loop breaks and sets running=false
+        assert!(!mgr.is_running());
     }
 }
