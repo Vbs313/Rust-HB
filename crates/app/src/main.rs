@@ -1,13 +1,13 @@
-//! # Hearthbuddy Rust Edition
+//! # Hearthbuddy Rust Edition — 主程序
 //!
-//! 主程序入口 — 集成 AI 引擎
+//! 通过 IPC 与 HsMod (BepInEx 插件) 通信，驱动 AI 引擎进行游戏。
 
 use hb_core::config::AppConfig;
 use hb_core::log;
-use hb_process_mgr::ProcessManager;
-use hb_bot_framework::bot_manager::BotManager;
-use hb_bot_framework::plugin_manager::PluginManager;
 use hb_bot_framework::routine_manager::RoutineManager;
+use hb_bot_framework::plugin_manager::PluginManager;
+use hb_ipc::IpcClient;
+use std::time::Duration;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -16,80 +16,108 @@ async fn main() -> anyhow::Result<()> {
     log::init(&config.log_level, config.log_file.as_deref());
     tracing::info!("Hearthbuddy Rust Edition v{}", env!("CARGO_PKG_VERSION"));
 
-    // 2. 发现进程
-    let mut proc_mgr = ProcessManager::new();
-    match unsafe { proc_mgr.discover_windows() } {
-        Ok(windows) => {
-            tracing::info!("Found {} Hearthstone window(s)", windows.len());
-            for win in &windows {
-                tracing::info!("  PID={}, Title={}", win.pid, win.title);
-            }
-        }
-        Err(e) => {
-            tracing::warn!("Failed to find windows: {e}");
-        }
-    }
-
-    // 3. 初始化框架
-    let mut bot_mgr = BotManager::new();
-    let plugin_mgr = PluginManager::new();
+    // 2. 初始化框架
     let mut routine_mgr = RoutineManager::new();
-
-    // 注册默认策略
     let default_routine = hb_bot_framework::default_routine::create_default();
     routine_mgr.register(default_routine);
     routine_mgr.set_active("DefaultRoutine")?;
-    tracing::info!("DefaultRoutine registered and active");
+    tracing::info!("DefaultRoutine registered");
 
-    // 4. 注册插件
+    let plugin_mgr = PluginManager::new();
     for plugin in hb_plugins::register_all() {
         plugin_mgr.register(plugin);
     }
     plugin_mgr.initialize_all();
-    tracing::info!("Plugins initialized");
 
-    // 5. 模拟一次 AI 决策（演示）
-    tracing::info!("Running AI test...");
-    if let Some(routine) = routine_mgr.active() {
-        match routine.our_turn_logic() {
-            Ok(()) => tracing::info!("AI test completed"),
-            Err(e) => tracing::warn!("AI test: {e}"),
+    // 3. 连接 HsMod IPC
+    tracing::info!("Connecting to HsMod IPC ({}秒超时)...", 10);
+    match IpcClient::connect(Duration::from_secs(10)) {
+        Ok(mut ipc) => {
+            tracing::info!("✅ IPC connected!");
+            // 验证连接
+            match ipc.get_game_state() {
+                Ok(state) => {
+                    tracing::info!("Scene: {}, Turn: {}, Mana: {}/{}",
+                        state.scene, state.turn, state.own_mana, state.own_max_mana);
+                    tracing::info!("Hand: {} cards, Board: {} minions vs {} minions",
+                        state.own_hand_count, state.own_minions.len(), state.enemy_minions.len());
+                },
+                Err(e) => tracing::warn!("Initial state read failed: {e}"),
+            }
+            run_game_loop(&mut ipc, &routine_mgr).await;
+        },
+        Err(e) => {
+            tracing::warn!("IPC connection failed: {e}");
+            tracing::warn!("Starting in offline/demo mode...");
+            run_demo_loop(&routine_mgr).await;
         }
     }
 
-    // 6. 启动主循环
-    tracing::info!("Starting main loop...");
-    match bot_mgr.start("DefaultBot") {
-        Ok(()) => main_loop(&bot_mgr, &routine_mgr).await,
-        Err(e) => tracing::warn!("Bot start skipped: {e}"),
-    }
-
-    // 7. 清理
+    // 4. 清理
     plugin_mgr.deinitialize_all();
     tracing::info!("Shutdown complete");
-
     Ok(())
 }
 
-/// 主循环：每帧调用 Bot.pulse()
-async fn main_loop(bot_mgr: &BotManager, routine_mgr: &RoutineManager) {
+/// 游戏主循环（IPC 在线模式）
+async fn run_game_loop(ipc: &mut IpcClient, routine_mgr: &RoutineManager) {
     let mut tick: u64 = 0;
     loop {
-        tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+        tokio::time::sleep(Duration::from_millis(500)).await;
         tick += 1;
 
-        // 每帧脉冲
-        if let Err(e) = bot_mgr.pulse() {
-            tracing::warn!("Bot pulse error: {e}");
+        // 获取游戏状态
+        let state = match ipc.get_game_state() {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::error!("IPC error: {e}, reconnecting...");
+                tokio::time::sleep(Duration::from_secs(5)).await;
+                continue;
+            }
+        };
+
+        // 非对战场景跳过
+        if state.scene != "Gameplay" && state.scene != "gameplay" {
+            if tick % 20 == 0 {
+                tracing::info!("Scene: {} (waiting for gameplay)", state.scene);
+            }
+            continue;
         }
 
-        // 每 30 秒模拟一次 AI 决策
-        if tick % 30 == 0 {
-            tracing::info!("Tick {tick}: running AI routine...");
-            if let Some(routine) = routine_mgr.active() {
-                if let Err(e) = routine.our_turn_logic() {
-                    tracing::warn!("Routine error: {e}");
-                }
+        // 检测是否我方回合
+        if !state.is_own_turn {
+            if tick % 20 == 0 {
+                tracing::info!("Waiting for our turn... (turn {})", state.turn);
+            }
+            continue;
+        }
+
+        tracing::info!("🎯 Our turn! Mana: {}/{}", state.own_mana, state.own_max_mana);
+
+        // 调用 AI 引擎
+        if let Some(routine) = routine_mgr.active() {
+            match routine.our_turn_logic() {
+                Ok(()) => tracing::info!("AI decision completed"),
+                Err(e) => tracing::error!("AI error: {e}"),
+            }
+        }
+
+        // 等待下一帧
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
+}
+
+/// 离线演示模式
+async fn run_demo_loop(routine_mgr: &RoutineManager) {
+    tracing::info!("Running in demo mode (no HsMod connection)...");
+    let mut tick: u64 = 0;
+    loop {
+        tokio::time::sleep(Duration::from_secs(10)).await;
+        tick += 1;
+        tracing::info!("Demo tick {tick}: running AI routine...");
+        if let Some(routine) = routine_mgr.active() {
+            if let Err(e) = routine.our_turn_logic() {
+                tracing::warn!("Routine error: {e}");
             }
         }
     }

@@ -321,6 +321,7 @@ dependencies = [
  "hb-core",
  "hb-game-api",
  "hb-input-sim",
+ "hb-ipc",
  "hb-mono-bridge",
  "hb-plugins",
  "hb-process-mgr",
@@ -401,6 +402,16 @@ version = "0.1.0"
 dependencies = [
  "hb-core",
  "rand",
+ "thiserror",
+ "tracing",
+]
+
+[[package]]
+name = "hb-ipc"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
  "thiserror",
  "tracing",
 ]

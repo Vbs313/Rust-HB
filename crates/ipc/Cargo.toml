@@ -1,0 +1,11 @@
+[package]
+name = "hb-ipc"
+version.workspace = true
+edition.workspace = true
+description = "IPC 通信层 - 与 HsMod (BepInEx 插件) 通过命名管道通信"
+
+[dependencies]
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+tracing.workspace = true
+thiserror.workspace = true

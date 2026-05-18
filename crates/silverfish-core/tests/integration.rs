@@ -4,14 +4,14 @@
 
 #[cfg(test)]
 mod tests {
-    use hb_silverfish_core::playfield::Playfield;
     use hb_silverfish_core::action::ActionType;
-    use hb_silverfish_core::move_generator::MoveGenerator;
-    use hb_silverfish_core::mini_simulator::MiniSimulator;
+    use hb_silverfish_core::ai::AiConfig;
     use hb_silverfish_core::behavior::default_behavior::DefaultBehavior;
     use hb_silverfish_core::behavior::Behavior;
-    use hb_silverfish_core::ai::AiConfig;
+    use hb_silverfish_core::mini_simulator::MiniSimulator;
     use hb_silverfish_core::minion::Minion;
+    use hb_silverfish_core::move_generator::MoveGenerator;
+    use hb_silverfish_core::playfield::Playfield;
     use hb_silverfish_core::weapon::Weapon;
 
     /// 创建一个标准测试局面：我方有 5 费+一个随从，敌方无随从
@@ -44,9 +44,16 @@ mod tests {
         let moves = move_gen.get_move_list(&pf, true);
         // 应该至少有: endturn + 攻击动作(1个目标)
         assert!(!moves.is_empty(), "Should have at least one action");
-        
-        let attack_moves: Vec<_> = moves.iter().filter(|m| m.action_type == ActionType::AttackWithMinion).collect();
-        assert_eq!(attack_moves.len(), 1, "Should have exactly one attack target (enemy hero)");
+
+        let attack_moves: Vec<_> = moves
+            .iter()
+            .filter(|m| m.action_type == ActionType::AttackWithMinion)
+            .collect();
+        assert_eq!(
+            attack_moves.len(),
+            1,
+            "Should have exactly one attack target (enemy hero)"
+        );
         assert_eq!(attack_moves[0].target.as_ref().unwrap().is_hero, true);
     }
 
@@ -70,7 +77,10 @@ mod tests {
 
         let best = simulator.search(&pf, &ai_config, &move_gen, &behavior);
         assert!(best.is_some(), "AI should find at least one valid action");
-        assert!(best.as_ref().unwrap().action_type != ActionType::EndTurn, "AI should prefer attacking over ending turn");
+        assert!(
+            best.as_ref().unwrap().action_type != ActionType::EndTurn,
+            "AI should prefer attacking over ending turn"
+        );
     }
 
     #[test]
@@ -88,7 +98,10 @@ mod tests {
         for m in &moves {
             if m.action_type == ActionType::AttackWithMinion {
                 let target = m.target.as_ref().unwrap();
-                assert!(target.taunt, "With taunt on board, all attacks must target taunt minion");
+                assert!(
+                    target.taunt,
+                    "With taunt on board, all attacks must target taunt minion"
+                );
             }
         }
     }
@@ -100,7 +113,10 @@ mod tests {
 
         // 局面价值应该为正（我方有利）
         let value = behavior.evaluate(&pf);
-        assert!(value > 0.0, "Board with our minion and no enemy minions should have positive value");
+        assert!(
+            value > 0.0,
+            "Board with our minion and no enemy minions should have positive value"
+        );
 
         // 局面反转：敌方有更多随从
         pf.enemy_minions.push(Minion::new_minion(3001, 5, 5));
@@ -120,7 +136,10 @@ mod tests {
         let value = behavior.evaluate(&pf);
 
         // 斩杀应该给极高价值 (>10000)
-        assert!(value > 10000.0, "Lethal board should have very high value, got {value}");
+        assert!(
+            value > 10000.0,
+            "Lethal board should have very high value, got {value}"
+        );
     }
 
     #[test]
@@ -139,7 +158,10 @@ mod tests {
             if m.action_type == ActionType::AttackWithMinion {
                 if let Some(ref target) = m.target {
                     if target.poisonous {
-                        assert!(m.penality >= 100, "Attacking poisonous minion should have high penalty");
+                        assert!(
+                            m.penality >= 100,
+                            "Attacking poisonous minion should have high penalty"
+                        );
                     }
                 }
             }
@@ -150,17 +172,31 @@ mod tests {
     fn test_ai_with_weapon_prefers_face() {
         let mut pf = setup_simple_board();
         pf.own_weapon = Some(Weapon {
-            entity_id: 1, card_id: 2001, angr: 3, durability: 2,
-            base_angr: 3, base_durability: 2,
-            windfury: false, poisonous: false, lifesteal: false, immune: false, mega_windfury: false,
+            entity_id: 1,
+            card_id: 2001,
+            angr: 3,
+            durability: 2,
+            base_angr: 3,
+            base_durability: 2,
+            windfury: false,
+            poisonous: false,
+            lifesteal: false,
+            immune: false,
+            mega_windfury: false,
         });
-        pf.own_hero.angr = 3;  // 英雄攻击力来自武器
+        pf.own_hero.angr = 3; // 英雄攻击力来自武器
         pf.own_hero.ready = true;
 
         let move_gen = MoveGenerator::new();
         let moves = move_gen.get_move_list(&pf, true);
-        let hero_attacks: Vec<_> = moves.iter().filter(|m| m.action_type == ActionType::AttackWithHero).collect();
-        assert!(!hero_attacks.is_empty(), "With weapon, hero should have attack options");
+        let hero_attacks: Vec<_> = moves
+            .iter()
+            .filter(|m| m.action_type == ActionType::AttackWithHero)
+            .collect();
+        assert!(
+            !hero_attacks.is_empty(),
+            "With weapon, hero should have attack options"
+        );
     }
 
     #[test]
@@ -168,21 +204,39 @@ mod tests {
         let mut pf = setup_simple_board();
         pf.mana = 10;
         pf.own_hand.push(hb_silverfish_core::playfield::HandCard {
-            card_id: 213, entity_id: 5, position: 0, cost: 4, original_cost: 4,
-            attack: 4, health: 5, card_type: hb_silverfish_core::CardType::Minion,
+            card_id: 213,
+            entity_id: 5,
+            position: 0,
+            cost: 4,
+            original_cost: 4,
+            attack: 4,
+            health: 5,
+            card_type: hb_silverfish_core::CardType::Minion,
             race: hb_silverfish_core::Race::None,
-            is_choice: false, has_targets: false, is_tradeable: false, is_forge: false,
+            is_choice: false,
+            has_targets: false,
+            is_tradeable: false,
+            is_forge: false,
         });
 
         let move_gen = MoveGenerator::new();
         let moves = move_gen.get_move_list(&pf, true);
 
-        let play_moves: Vec<_> = moves.iter().filter(|m| m.action_type == ActionType::PlayCard).collect();
-        assert!(!play_moves.is_empty(), "Should be able to play the 4-cost minion with 10 mana");
+        let play_moves: Vec<_> = moves
+            .iter()
+            .filter(|m| m.action_type == ActionType::PlayCard)
+            .collect();
+        assert!(
+            !play_moves.is_empty(),
+            "Should be able to play the 4-cost minion with 10 mana"
+        );
 
         // 手牌中应该包含随从位置的多个选项
         for m in &play_moves {
-            assert!(m.position >= 0, "PlayCard action should have valid position");
+            assert!(
+                m.position >= 0,
+                "PlayCard action should have valid position"
+            );
         }
     }
 }

@@ -13,6 +13,7 @@ members = [
     "crates/plugins",
     "crates/auth",
     "crates/compression",
+    "crates/ipc",
     "crates/app",
 ]
 

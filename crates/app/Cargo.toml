@@ -16,6 +16,7 @@ hb-silverfish-core = { path = "../silverfish-core" }
 hb-auth = { path = "../auth" }
 hb-compression = { path = "../compression" }
 hb-plugins = { path = "../plugins" }
+hb-ipc = { path = "../ipc" }
 tracing.workspace = true
 tokio.workspace = true
 anyhow.workspace = true
