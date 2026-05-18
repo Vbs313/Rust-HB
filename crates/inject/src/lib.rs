@@ -250,16 +250,42 @@ fn read_gs() -> String {
         };
         
         let mut turn = 0i32; let mut is_own = false;
+        let mut mana = 0u32; let mut oh_hp=30; let mut oh_atk=0; let mut oh_arm=0;
+        let mut eh_hp=30; let mut eh_atk=0; let mut eh_arm=0; let mut hand_c=0u32; let mut opp_hand_c=0u32;
+        let mut my_deck=30u32; let mut op_deck=30u32;
+        
         let gs_class = find_class("GameState");
         if gs_class != 0 {
             let gs = call_static_obj(gs_class, "Get");
             if gs != 0 {
                 if let Some(t) = call_instance_int(gs_class, gs, "GetTurn") { turn = t; }
                 if let Some(f) = call_instance_int(gs_class, gs, "IsFriendlySidePlayerTurn") { is_own = f > 0; }
+                if let Some(m) = call_instance_int(gs_class, gs, "GetNumAvailableResources") { mana = m as u32; }
+                
+                let pc = find_class("Player");
+                if pc != 0 {
+                    let me = call_static_obj(gs_class, "GetFriendlySidePlayer");
+                    let op = call_static_obj(gs_class, "GetOpposingSidePlayer");
+                    
+                    if me != 0 {
+                        if let Some(h) = call_instance_int(pc, me, "GetHealth") {
+                            if let Some(d) = call_instance_int(pc, me, "GetDamage") { oh_hp = (h - d).max(0); } else { oh_hp = h.max(0); }
+                        }
+                        if let Some(a) = call_instance_int(pc, me, "GetAttack") { oh_atk = a.max(0); }
+                        if let Some(a) = call_instance_int(pc, me, "GetArmor") { oh_arm = a.max(0); }
+                    }
+                    if op != 0 {
+                        if let Some(h) = call_instance_int(pc, op, "GetHealth") {
+                            if let Some(d) = call_instance_int(pc, op, "GetDamage") { eh_hp = (h - d).max(0); } else { eh_hp = h.max(0); }
+                        }
+                        if let Some(a) = call_instance_int(pc, op, "GetAttack") { eh_atk = a.max(0); }
+                        if let Some(a) = call_instance_int(pc, op, "GetArmor") { eh_arm = a.max(0); }
+                    }
+                }
             }
         }
         
-        format!(r#"{{"scene":"{scene}","is_own_turn":{is_own},"turn":{turn}}}"#)
+        format!(r#"{{"scene":"{scene}","is_own_turn":{is_own},"turn":{turn},"own_mana":{mana},"own_max_mana":10,"own_hero":{{"entity_id":1,"card_id":"HERO_01","health":{oh_hp},"attack":{oh_atk},"armor":{oh_arm},"has_taunt":false,"has_divine_shield":false,"has_stealth":false,"has_poisonous":false,"has_lifesteal":false,"is_exhausted":false,"num_attacks":0}},"own_hand":[],"own_minions":[],"enemy_minions":[],"own_hand_count":{hand_c},"enemy_hand_count":{opp_hand_c},"own_deck_count":{my_deck},"enemy_deck_count":{op_deck},"enemy_hero":{{"entity_id":2,"card_id":"HERO_02","health":{eh_hp},"attack":{eh_atk},"armor":{eh_arm},"has_taunt":false,"has_divine_shield":false,"has_stealth":false,"has_poisonous":false,"has_lifesteal":false,"is_exhausted":false,"num_attacks":0}}}}"#)
     }
 }
 
