@@ -21,6 +21,12 @@ pub struct Weapon {
     pub mega_windfury: bool,
 }
 
+impl Default for Weapon {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Weapon {
     pub fn new() -> Self {
         Self {

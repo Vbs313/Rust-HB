@@ -57,6 +57,12 @@ pub struct Ai {
     behavior: Box<dyn Behavior>,
 }
 
+impl Default for Ai {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Ai {
     pub fn new() -> Self {
         Self {

@@ -40,6 +40,7 @@ pub struct Card {
 }
 
 /// 卡牌数据库
+#[derive(Default)]
 pub struct CardDb {
     cards_by_id: HashMap<CardId, Card>,
     cards_by_str: HashMap<String, CardId>,
@@ -115,11 +116,3 @@ impl CardDb {
     }
 }
 
-impl Default for CardDb {
-    fn default() -> Self {
-        Self {
-            cards_by_id: HashMap::new(),
-            cards_by_str: HashMap::new(),
-        }
-    }
-}

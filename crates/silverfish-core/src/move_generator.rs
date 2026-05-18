@@ -14,6 +14,12 @@ pub struct MoveGenerator {
     penality_mgr: PenalityManager,
 }
 
+impl Default for MoveGenerator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MoveGenerator {
     pub fn new() -> Self {
         Self {
@@ -196,11 +202,11 @@ impl MoveGenerator {
             }
         }
         // 可对己方英雄
-        if !pf.own_hero.untouchable && pf.own_hero.immune == false {
+        if !pf.own_hero.untouchable && !pf.own_hero.immune {
             targets.push(pf.own_hero.clone());
         }
         // 可对敌方英雄
-        if !pf.enemy_hero.untouchable && pf.enemy_hero.immune == false {
+        if !pf.enemy_hero.untouchable && !pf.enemy_hero.immune {
             targets.push(pf.enemy_hero.clone());
         }
 
@@ -438,7 +444,7 @@ impl MoveGenerator {
                 }
             }
             // 英雄总是可攻击的（除非有潜行免疫等）
-            if !pf.enemy_hero.untouchable && pf.enemy_hero.immune == false {
+            if !pf.enemy_hero.untouchable && !pf.enemy_hero.immune {
                 targets.push(pf.enemy_hero.clone());
             }
         }

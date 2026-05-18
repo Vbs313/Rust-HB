@@ -13,6 +13,12 @@ use crate::playfield::Playfield;
 /// 惩罚值管理器
 pub struct PenalityManager;
 
+impl Default for PenalityManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PenalityManager {
     pub fn new() -> Self {
         Self

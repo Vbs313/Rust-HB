@@ -15,6 +15,12 @@ const NEXT_TURN_TOTAL_BOARDS: u32 = 200;
 /// DFS 搜索模拟器
 pub struct MiniSimulator;
 
+impl Default for MiniSimulator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MiniSimulator {
     pub fn new() -> Self {
         Self
@@ -134,7 +140,7 @@ impl MiniSimulator {
                 vec![valid[valid.len() - 1]] // 最后一个通常是 endturn
             } else {
                 sorted.truncate(max_wide);
-                sorted.into_iter().map(|a| *a).collect()
+                sorted.into_iter().copied().collect()
             }
         } else {
             valid
