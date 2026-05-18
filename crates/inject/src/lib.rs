@@ -32,6 +32,7 @@ extern "system" { fn GetCurrentProcessId() -> DWORD; fn CreateToolhelp32Snapshot
 // ===== Global Mono API pointers =====
 static mut FN_ROOT: isize = 0;      // mono_get_root_domain
 static mut FN_CORLIB: isize = 0;    // mono_get_corlib
+static mut FN_THREAD_ATTACH: isize = 0; // mono_thread_attach
 static mut FN_CFN: isize = 0;       // mono_class_from_name
 static mut FN_ASM_FOREACH: isize = 0; // mono_assembly_foreach
 static mut FN_ASM_IMAGE: isize = 0;   // mono_assembly_get_image
@@ -75,6 +76,7 @@ unsafe fn init_mono() {
     FN_GET_METHOD = get("mono_class_get_method_from_name");
     FN_INVOKE = get("mono_runtime_invoke");
     
+    FN_THREAD_ATTACH = get("mono_thread_attach");
     if FN_ROOT != 0 && FN_CORLIB != 0 { MONO_READY = true; }
 }
 
@@ -129,18 +131,57 @@ unsafe fn find_asm_csharp() -> MonoImage {
     CALLBACK_RESULT
 }
 
-/// Find SceneMgr class using mono_class_from_name
+/// Find a class by name from Assembly-CSharp
+unsafe fn find_class(name: &str) -> MonoClass {
+    if FN_CFN == 0 { return 0; }
+    let cfn: extern "C" fn(MonoImage, *const i8, *const i8) -> MonoClass = std::mem::transmute(FN_CFN);
+    let asm = if ASM_CSHARP != 0 { ASM_CSHARP } else { find_asm_csharp() };
+    if asm == 0 { return 0; }
+    ASM_CSHARP = asm;
+    let cname = std::ffi::CString::new(name).unwrap();
+    cfn(asm, c"".as_ptr() as *const i8, cname.as_ptr() as *const i8)
+}
+
+/// Call a static method returning int/enum (using -1 for any param count)
+unsafe fn call_static_int(klass: MonoClass, method_name: &str) -> Option<i32> {
+    if FN_GET_METHOD == 0 || FN_INVOKE == 0 { return None; }
+    let get_m: extern "C" fn(MonoClass, *const i8, i32) -> MonoMethod = std::mem::transmute(FN_GET_METHOD);
+    let invoke: extern "C" fn(MonoMethod, MonoObject, *mut MonoObject, *mut MonoObject) -> MonoObject = std::mem::transmute(FN_INVOKE);
+    let mname = std::ffi::CString::new(method_name).unwrap();
+    let method = get_m(klass, mname.as_ptr() as *const i8, -1);
+    if method == 0 { return None; }
+    let result = invoke(method, 0, std::ptr::null_mut(), std::ptr::null_mut());
+    if result == 0 { return None; }
+    Some(*((result + 4) as *const i32))
+}
+
+/// Call an instance method returning int/enum
+unsafe fn call_instance_int(klass: MonoClass, instance: MonoObject, method_name: &str) -> Option<i32> {
+    if FN_GET_METHOD == 0 || FN_INVOKE == 0 { return None; }
+    let get_m: extern "C" fn(MonoClass, *const i8, i32) -> MonoMethod = std::mem::transmute(FN_GET_METHOD);
+    let invoke: extern "C" fn(MonoMethod, MonoObject, *mut MonoObject, *mut MonoObject) -> MonoObject = std::mem::transmute(FN_INVOKE);
+    let mname = std::ffi::CString::new(method_name).unwrap();
+    let method = get_m(klass, mname.as_ptr() as *const i8, -1);
+    if method == 0 { return None; }
+    let result = invoke(method, instance, std::ptr::null_mut(), std::ptr::null_mut());
+    if result == 0 { return None; }
+    Some(*((result + 4) as *const i32))
+}
+
+/// Call a static method returning object reference
+unsafe fn call_static_obj(klass: MonoClass, method_name: &str) -> MonoObject {
+    if FN_GET_METHOD == 0 || FN_INVOKE == 0 { return 0; }
+    let get_m: extern "C" fn(MonoClass, *const i8, i32) -> MonoMethod = std::mem::transmute(FN_GET_METHOD);
+    let invoke: extern "C" fn(MonoMethod, MonoObject, *mut MonoObject, *mut MonoObject) -> MonoObject = std::mem::transmute(FN_INVOKE);
+    let mname = std::ffi::CString::new(method_name).unwrap();
+    let method = get_m(klass, mname.as_ptr() as *const i8, 0);
+    if method == 0 { return 0; }
+    invoke(method, 0, std::ptr::null_mut(), std::ptr::null_mut())
+}
+
 unsafe fn find_scene_mgr() -> MonoClass {
     if SCENE_MGR_CLASS != 0 { return SCENE_MGR_CLASS; }
-    if FN_CFN == 0 { return 0; }
-    
-    let cfn: extern "C" fn(MonoImage, *const i8, *const i8) -> MonoClass = std::mem::transmute(FN_CFN);
-    
-    let asm_csharp = if ASM_CSHARP != 0 { ASM_CSHARP } else { find_asm_csharp() };
-    if asm_csharp == 0 { return 0; }
-    ASM_CSHARP = asm_csharp;
-    
-    let cls = cfn(asm_csharp, c"".as_ptr() as *const i8, c"SceneMgr".as_ptr() as *const i8);
+    let cls = find_class("SceneMgr");
     if cls != 0 { SCENE_MGR_CLASS = cls; }
     cls
 }
@@ -149,6 +190,13 @@ unsafe fn find_scene_mgr() -> MonoClass {
 unsafe extern "system" fn ipc_thread(_: LPVOID) -> DWORD {
     Sleep(3000);
     init_mono();
+    // Attach current thread to Mono domain
+    if FN_THREAD_ATTACH != 0 && FN_ROOT != 0 {
+        let root_fn: extern "C" fn() -> MonoDomain = std::mem::transmute(FN_ROOT);
+        let attach: extern "C" fn(MonoDomain) -> *mut u8 = std::mem::transmute(FN_THREAD_ATTACH);
+        let domain = root_fn();
+        attach(domain);
+    }
     Sleep(2000);
     if MONO_READY { find_scene_mgr(); } // pre-cache on startup
     
@@ -186,37 +234,32 @@ fn handle(j: &str) -> String {
 fn read_gs() -> String {
     unsafe {
         if !MONO_READY { return ph(); }
+        let sm = if SCENE_MGR_CLASS != 0 { SCENE_MGR_CLASS } else { find_scene_mgr() };
+        if sm == 0 { return r#"{"scene":"NoSM"}"#.into(); }
         
-        // Get domain for diagnostics
-        let root_fn: extern "C" fn() -> MonoDomain = std::mem::transmute(FN_ROOT);
-        let domain = root_fn();
+        let instance = call_static_obj(sm, "Get");
+        if instance == 0 { return r#"{"scene":"NoGet"}"#.into(); }
         
-        // Ensure SceneMgr is found
-        let sm = if SCENE_MGR_CLASS != 0 { SCENE_MGR_CLASS }
-                 else { find_scene_mgr() };
+        let scene = match call_instance_int(sm, instance, "GetMode") {
+            Some(0) => "INVALID", Some(1) => "STARTUP", Some(2) => "LOGIN", Some(3) => "HUB",
+            Some(4) => "GAMEPLAY", Some(5) => "COLLECTION", Some(6) => "ADVENTURE",
+            Some(7) => "TAVERN_BRAWL", Some(8) => "ARENA", Some(9) => "DRAFT",
+            Some(10) => "PACK_OPENING", Some(11) => "TOURNAMENT", Some(12) => "FRIENDLY",
+            Some(13) => "FATAL_ERROR", Some(14) => "GAME_MODE", Some(15) => "BACON",
+            Some(_) => "OTHER", None => "NoMode"
+        };
         
-        if sm == 0 {
-            // Check if Assembly-CSharp is available
-            let asm = if ASM_CSHARP != 0 { ASM_CSHARP } else { find_asm_csharp() };
-            if asm != 0 { ASM_CSHARP = asm; }
-            
-            if ASM_CSHARP == 0 {
-                return format!(r#"{{"scene":"NoASM","domain":"0x{domain:x}"}}"#);
+        let mut turn = 0i32; let mut is_own = false;
+        let gs_class = find_class("GameState");
+        if gs_class != 0 {
+            let gs = call_static_obj(gs_class, "Get");
+            if gs != 0 {
+                if let Some(t) = call_instance_int(gs_class, gs, "GetTurn") { turn = t; }
+                if let Some(f) = call_instance_int(gs_class, gs, "IsFriendlySidePlayerTurn") { is_own = f > 0; }
             }
-            // Assembly found but SceneMgr not found in it
-            return format!(r#"{{"scene":"NoSM","domain":"0x{domain:x}","asm":"0x{asm:x}"}}"#, asm = ASM_CSHARP);
         }
         
-        // SceneMgr found! Now call SceneMgr.Get() to get the scene mode
-        // For now, just confirm we found it
-        if FN_CLASS_NAME != 0 {
-            let gn: extern "C" fn(MonoClass) -> *const i8 = std::mem::transmute(FN_CLASS_NAME);
-            let np = gn(sm);
-            let nm = if !np.is_null() { std::ffi::CStr::from_ptr(np).to_string_lossy().to_string() } else { "?".into() };
-            return format!(r#"{{"scene":"Found","class":"{nm}","domain":"0x{domain:x}"}}"#);
-        }
-        
-        format!(r#"{{"scene":"Found","domain":"0x{domain:x}"}}"#)
+        format!(r#"{{"scene":"{scene}","is_own_turn":{is_own},"turn":{turn}}}"#)
     }
 }
 
