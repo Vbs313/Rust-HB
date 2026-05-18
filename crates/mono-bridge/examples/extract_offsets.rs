@@ -1,39 +1,48 @@
-//! 从 Hearthbuddy.exe 内存中提取 OffsetTable36
-//! 先启动 Hearthbuddy.exe（已移除认证的修改版），再运行此工具
+//! OffsetTable36 提取器 — 自动模式（简化版）
+//! 配合 run_extract.bat 使用：先启动 HB，再运行此工具
 
 use hb_core::win32::query_memory_info;
 use hb_core::win32::ProcessHandle;
 
 fn main() {
-    println!("=== OffsetTable Extractor ===\n");
-    println!("步骤:");
-    println!("  1. 确认 Hearthstone.exe 已运行 (当前 PID=9364 ✅)");
-    println!("  2. 启动 HB3.1.2/Hearthbuddy.exe（或改名的 .exe）");
-    println!("  3. 按 Enter 扫描...");
-    let _ = std::io::stdin().read_line(&mut String::new());
+    println!("=== OffsetTable36 Extractor ===\n");
 
-    // 找进程：检查多个可能的进程名
-    let names = ["Hearthbuddy", "ynvbkpxdsd", "djndiyomai", "炉石中控"];
-    let mut process = None;
-    for name in &names {
-        if let Ok(p) = ProcessHandle::find_by_name(name) {
-            println!("✅ 找到进程: {name} PID={}", p.pid);
-            process = Some(p);
-            break;
-        }
-    }
-
-    let p = match process {
-        Some(p) => p,
-        None => {
-            println!("❌ 未找到 Hearthbuddy 相关进程");
-            println!("   请先启动 HB3.1.2 目录下的 exe");
-            return;
+    // 先尝试已知的 PID（ysenatmhyn 进程已运行）
+    println!("Trying known PID 14916...");
+    let p = if let Ok(p) = ProcessHandle::find_by_pid(14916) {
+        println!("✅ Attached to PID 14916");
+        p
+    } else {
+        // 循环等待 Hearthbuddy 进程出现
+        println!("PID 14916 not accessible, waiting for process...");
+        let names = [
+            "Hearthbuddy",
+            "ynvbkpxdsd",
+            "djndiyomai",
+            "炉石中控",
+            "vsezrrppcj",
+            "ysenatmhyn",
+        ];
+        'outer: loop {
+            for name in &names {
+                if let Ok(p) = ProcessHandle::find_by_name(name) {
+                    println!("✅ {} PID={}", name, p.pid);
+                    break 'outer p;
+                }
+            }
+            print!(".");
+            use std::io::{stdout, Write};
+            stdout().flush().ok();
+            std::thread::sleep(std::time::Duration::from_millis(500));
         }
     };
 
-    // 扫描进程内存找 36 个连续 u32 构成的有效 offset 表
-    println!("\n扫描进程内存 (可能需要 30 秒)...");
+    // 再等一会儿让 HB 完成初始化
+    println!("\nWaiting for initialization...");
+    std::thread::sleep(std::time::Duration::from_secs(3));
+
+    // 扫描内存找 36-int offset 表
+    println!("\nScanning memory...");
     let mut addr: usize = 0x00010000;
     let mut found = 0u32;
 
@@ -51,7 +60,6 @@ fn main() {
             addr = start + size.max(0x10000);
             continue;
         }
-
         let mut off = 0usize;
         while off + 144 < size {
             if let Ok(data) = p.read_bytes(start + off, 144) {
@@ -86,8 +94,8 @@ fn main() {
         addr = start + size.max(0x10000);
     }
     if found == 0 {
-        println!("❌ 未找到 offset 表");
-        println!("   可能原因: Hearthbuddy 的修改版可能已将偏移数据替换为其他机制");
+        println!("\n❌ No offset table found");
+        println!("   HB may have been modified to not store offsets as contiguous array");
     }
 }
 

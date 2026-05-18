@@ -2,9 +2,9 @@
 //!
 //! 对应 C# 版的 PluginManager.cs
 
-use std::sync::Arc;
+use crate::{BotError, Plugin};
 use dashmap::DashMap;
-use crate::{Plugin, BotError};
+use std::sync::Arc;
 
 /// 插件管理器
 pub struct PluginManager {
@@ -19,7 +19,9 @@ impl Default for PluginManager {
 
 impl PluginManager {
     pub fn new() -> Self {
-        Self { plugins: DashMap::new() }
+        Self {
+            plugins: DashMap::new(),
+        }
     }
 
     pub fn register(&self, plugin: Arc<dyn Plugin>) {
@@ -54,18 +56,30 @@ impl PluginManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Plugin, BotError};
+    use crate::{BotError, Plugin};
     use std::sync::Arc;
 
     struct TestPlugin;
 
     impl Plugin for TestPlugin {
-        fn name(&self) -> &'static str { "TestPlugin" }
-        fn author(&self) -> &'static str { "Tester" }
-        fn description(&self) -> &'static str { "Test plugin" }
-        fn initialize(&self) -> Result<(), BotError> { Ok(()) }
-        fn deinitialize(&self) -> Result<(), BotError> { Ok(()) }
-        fn is_enabled(&self) -> bool { true }
+        fn name(&self) -> &'static str {
+            "TestPlugin"
+        }
+        fn author(&self) -> &'static str {
+            "Tester"
+        }
+        fn description(&self) -> &'static str {
+            "Test plugin"
+        }
+        fn initialize(&self) -> Result<(), BotError> {
+            Ok(())
+        }
+        fn deinitialize(&self) -> Result<(), BotError> {
+            Ok(())
+        }
+        fn is_enabled(&self) -> bool {
+            true
+        }
     }
 
     #[test]

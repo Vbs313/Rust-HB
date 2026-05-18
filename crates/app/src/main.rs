@@ -34,16 +34,6 @@ async fn main() -> anyhow::Result<()> {
     match IpcClient::connect(Duration::from_secs(10)) {
         Ok(mut ipc) => {
             tracing::info!("✅ IPC connected!");
-            // 验证连接
-            match ipc.get_game_state() {
-                Ok(state) => {
-                    tracing::info!("Scene: {}, Turn: {}, Mana: {}/{}",
-                        state.scene, state.turn, state.own_mana, state.own_max_mana);
-                    tracing::info!("Hand: {} cards, Board: {} minions vs {} minions",
-                        state.own_hand_count, state.own_minions.len(), state.enemy_minions.len());
-                },
-                Err(e) => tracing::warn!("Initial state read failed: {e}"),
-            }
             run_game_loop(&mut ipc, &routine_mgr).await;
         },
         Err(e) => {
@@ -66,19 +56,24 @@ async fn run_game_loop(ipc: &mut IpcClient, routine_mgr: &RoutineManager) {
         tokio::time::sleep(Duration::from_millis(500)).await;
         tick += 1;
 
-        // 获取游戏状态
+        // 获取游戏状态，失败时重连
         let state = match ipc.get_game_state() {
             Ok(s) => s,
             Err(e) => {
                 tracing::error!("IPC error: {e}, reconnecting...");
-                tokio::time::sleep(Duration::from_secs(5)).await;
+                // 尝试重连
+                match IpcClient::connect(Duration::from_secs(5)) {
+                    Ok(new_ipc) => { *ipc = new_ipc; tracing::info!("Reconnected!"); },
+                    Err(e2) => tracing::error!("Reconnect failed: {e2}"),
+                }
+                tokio::time::sleep(Duration::from_secs(2)).await;
                 continue;
             }
         };
 
         // 非对战场景跳过
         if state.scene != "Gameplay" && state.scene != "gameplay" {
-            if tick % 20 == 0 {
+            if tick.is_multiple_of(20) {
                 tracing::info!("Scene: {} (waiting for gameplay)", state.scene);
             }
             continue;
@@ -86,7 +81,7 @@ async fn run_game_loop(ipc: &mut IpcClient, routine_mgr: &RoutineManager) {
 
         // 检测是否我方回合
         if !state.is_own_turn {
-            if tick % 20 == 0 {
+            if tick.is_multiple_of(20) {
                 tracing::info!("Waiting for our turn... (turn {})", state.turn);
             }
             continue;

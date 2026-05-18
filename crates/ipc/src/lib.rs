@@ -183,7 +183,8 @@ impl IpcClient {
                     std::ptr::null_mut(),
                 );
                 if h != -1isize {
-                    SetNamedPipeHandleState(h, &1u32, std::ptr::null(), std::ptr::null());
+                    // Byte read mode to match server (0 = PIPE_READMODE_BYTE)
+                    SetNamedPipeHandleState(h, &0u32, std::ptr::null(), std::ptr::null());
                     return Ok(Self {
                         seq: 0,
                         pipe: Pipe { handle: h },
@@ -206,14 +207,15 @@ impl IpcClient {
 
         self.recv_buf.clear();
         loop {
-            let mut b = [0u8; 1];
-            match self.pipe.read(&mut b) {
+            let mut chunk = [0u8; 4096];
+            match self.pipe.read(&mut chunk) {
                 Ok(0) => return Err(IpcError::Disconnected),
-                Ok(_) => {
-                    if b[0] == b'\n' {
+                Ok(n) => {
+                    if let Some(pos) = chunk[..n].iter().position(|&b| b == b'\n') {
+                        self.recv_buf.extend_from_slice(&chunk[..pos]);
                         break;
                     }
-                    self.recv_buf.push(b[0]);
+                    self.recv_buf.extend_from_slice(&chunk[..n]);
                 }
                 Err(e) => return Err(IpcError::Io(e)),
             }
@@ -260,7 +262,10 @@ mod tests {
 
     #[test]
     fn test_ping_roundtrip() {
-        let req = IpcRequest::Ping { seq: 1, timestamp: 123456789 };
+        let req = IpcRequest::Ping {
+            seq: 1,
+            timestamp: 123456789,
+        };
         let json = serde_json::to_string(&req).unwrap();
         assert!(json.contains("Ping"));
         assert!(json.contains("123456789"));
@@ -312,7 +317,10 @@ mod tests {
 
     #[test]
     fn test_pong_response() {
-        let resp = IpcResponse::Pong { seq: 1, timestamp: 987654321 };
+        let resp = IpcResponse::Pong {
+            seq: 1,
+            timestamp: 987654321,
+        };
         let json = serde_json::to_string(&resp).unwrap();
         let parsed: IpcResponse = serde_json::from_str(&json).unwrap();
         match parsed {
@@ -360,40 +368,39 @@ mod tests {
                 is_exhausted: false,
                 num_attacks: 1,
             },
-            own_hand: vec![
-                CardData {
-                    entity_id: 10,
-                    card_id: "CS2_118".into(),
-                    cost: 4,
-                    attack: 4,
-                    health: 5,
-                    card_type: "Minion".into(),
-                },
-            ],
+            own_hand: vec![CardData {
+                entity_id: 10,
+                card_id: "CS2_118".into(),
+                cost: 4,
+                attack: 4,
+                health: 5,
+                card_type: "Minion".into(),
+            }],
             own_minions: vec![],
-            enemy_minions: vec![
-                EntityData {
-                    entity_id: 20,
-                    card_id: "CS2_182".into(),
-                    health: 3,
-                    attack: 3,
-                    armor: 0,
-                    has_taunt: true,
-                    has_divine_shield: false,
-                    has_stealth: false,
-                    has_poisonous: false,
-                    has_lifesteal: false,
-                    is_exhausted: true,
-                    num_attacks: 0,
-                },
-            ],
+            enemy_minions: vec![EntityData {
+                entity_id: 20,
+                card_id: "CS2_182".into(),
+                health: 3,
+                attack: 3,
+                armor: 0,
+                has_taunt: true,
+                has_divine_shield: false,
+                has_stealth: false,
+                has_poisonous: false,
+                has_lifesteal: false,
+                is_exhausted: true,
+                num_attacks: 0,
+            }],
             own_hand_count: 1,
             enemy_hand_count: 3,
             own_deck_count: 20,
             enemy_deck_count: 18,
         };
 
-        let resp = IpcResponse::GameState { seq: 1, state: state };
+        let resp = IpcResponse::GameState {
+            seq: 1,
+            state: state,
+        };
         let json = serde_json::to_string(&resp).unwrap();
         let parsed: IpcResponse = serde_json::from_str(&json).unwrap();
 
@@ -419,7 +426,10 @@ mod tests {
 
     #[test]
     fn test_error_response() {
-        let resp = IpcResponse::Error { seq: 5, message: "Not connected".into() };
+        let resp = IpcResponse::Error {
+            seq: 5,
+            message: "Not connected".into(),
+        };
         let json = serde_json::to_string(&resp).unwrap();
         let parsed: IpcResponse = serde_json::from_str(&json).unwrap();
         match parsed {
@@ -433,11 +443,19 @@ mod tests {
 
     #[test]
     fn test_action_result_response() {
-        let resp = IpcResponse::ActionResult { seq: 3, success: true, error: None };
+        let resp = IpcResponse::ActionResult {
+            seq: 3,
+            success: true,
+            error: None,
+        };
         let json = serde_json::to_string(&resp).unwrap();
         let parsed: IpcResponse = serde_json::from_str(&json).unwrap();
         match parsed {
-            IpcResponse::ActionResult { seq, success, error } => {
+            IpcResponse::ActionResult {
+                seq,
+                success,
+                error,
+            } => {
                 assert_eq!(seq, 3);
                 assert!(success);
                 assert!(error.is_none());

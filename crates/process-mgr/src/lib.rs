@@ -84,21 +84,36 @@ mod tests {
 
     #[test]
     fn test_rect_dimensions() {
-        let r = Rect { left: 100, top: 200, right: 400, bottom: 500 };
+        let r = Rect {
+            left: 100,
+            top: 200,
+            right: 400,
+            bottom: 500,
+        };
         assert_eq!(r.width(), 300);
         assert_eq!(r.height(), 300);
     }
 
     #[test]
     fn test_rect_zero() {
-        let r = Rect { left: 0, top: 0, right: 0, bottom: 0 };
+        let r = Rect {
+            left: 0,
+            top: 0,
+            right: 0,
+            bottom: 0,
+        };
         assert_eq!(r.width(), 0);
         assert_eq!(r.height(), 0);
     }
 
     #[test]
     fn test_rect_negative_coordinates() {
-        let r = Rect { left: -100, top: -200, right: 100, bottom: 200 };
+        let r = Rect {
+            left: -100,
+            top: -200,
+            right: 100,
+            bottom: 200,
+        };
         assert_eq!(r.width(), 200);
         assert_eq!(r.height(), 400);
     }
@@ -109,7 +124,12 @@ mod tests {
             pid: 1234,
             hwnd: std::ptr::null_mut(),
             title: "Hearthstone".to_string(),
-            rect: Some(Rect { left: 0, top: 0, right: 1920, bottom: 1080 }),
+            rect: Some(Rect {
+                left: 0,
+                top: 0,
+                right: 1920,
+                bottom: 1080,
+            }),
         };
         assert_eq!(hw.pid, 1234);
         assert_eq!(hw.title, "Hearthstone");
@@ -169,7 +189,9 @@ impl ProcessManager {
 
         let success = EnumWindows(Some(enum_window_callback), data);
         if success == 0 {
-            return Err(ProcessError::EnumFailed("EnumWindows returned 0".to_string()));
+            return Err(ProcessError::EnumFailed(
+                "EnumWindows returned 0".to_string(),
+            ));
         }
 
         self.windows = windows.clone();
@@ -191,7 +213,9 @@ impl ProcessManager {
     /// `hwnd` 必须是有效的窗口句柄
     pub unsafe fn focus_window(&self, hwnd: HWND) -> Result<(), ProcessError> {
         if SetForegroundWindow(hwnd) == 0 {
-            return Err(ProcessError::WindowError("SetForegroundWindow failed".to_string()));
+            return Err(ProcessError::WindowError(
+                "SetForegroundWindow failed".to_string(),
+            ));
         }
         ShowWindow(hwnd, SW_RESTORE);
         Ok(())
@@ -201,7 +225,12 @@ impl ProcessManager {
     ///
     /// # Safety
     /// `hwnd` 必须是有效的窗口句柄
-    pub unsafe fn resize_window(&self, hwnd: HWND, width: i32, height: i32) -> Result<(), ProcessError> {
+    pub unsafe fn resize_window(
+        &self,
+        hwnd: HWND,
+        width: i32,
+        height: i32,
+    ) -> Result<(), ProcessError> {
         if MoveWindow(hwnd, 0, 0, width, height, 1) == 0 {
             return Err(ProcessError::WindowError("MoveWindow failed".to_string()));
         }
@@ -227,7 +256,12 @@ unsafe extern "system" fn enum_window_callback(hwnd: HWND, lparam: isize) -> i32
         let mut pid: u32 = 0;
         GetWindowThreadProcessId(hwnd, &mut pid);
 
-        let mut rect = RECT { left: 0, top: 0, right: 0, bottom: 0 };
+        let mut rect = RECT {
+            left: 0,
+            top: 0,
+            right: 0,
+            bottom: 0,
+        };
         let has_rect = GetWindowRect(hwnd, &mut rect) != 0;
 
         windows.push(HearthstoneWindow {

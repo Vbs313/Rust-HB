@@ -92,7 +92,8 @@ mod tests {
         let config = AiConfig::default();
         let mut pf = empty_pf();
 
-        pf.enemy_minions.push(crate::minion::Minion::new_minion(1, 3, 3));
+        pf.enemy_minions
+            .push(crate::minion::Minion::new_minion(1, 3, 3));
         pf.enemy_minions[0].entity_id = 100;
 
         let threat = simulator.simulate(&pf, &config);
@@ -107,10 +108,14 @@ mod tests {
         let mut pf_normal = empty_pf();
         let mut pf_charge = empty_pf();
 
-        pf_normal.enemy_minions.push(crate::minion::Minion::new_minion(1, 3, 3));
+        pf_normal
+            .enemy_minions
+            .push(crate::minion::Minion::new_minion(1, 3, 3));
         pf_normal.enemy_minions[0].entity_id = 100;
 
-        pf_charge.enemy_minions.push(crate::minion::Minion::new_minion(1, 3, 3));
+        pf_charge
+            .enemy_minions
+            .push(crate::minion::Minion::new_minion(1, 3, 3));
         pf_charge.enemy_minions[0].entity_id = 101;
         pf_charge.enemy_minions[0].charge = true;
 
@@ -141,12 +146,16 @@ mod tests {
         let config = AiConfig::default();
         let mut pf = empty_pf();
 
-        pf.enemy_minions.push(crate::minion::Minion::new_minion(1, 1, 1));
+        pf.enemy_minions
+            .push(crate::minion::Minion::new_minion(1, 1, 1));
         pf.enemy_minions[0].entity_id = 100;
         pf.enemy_minions[0].poisonous = true;
 
         let threat = simulator.simulate(&pf, &config);
         // 1/1 基础威胁 = 1，剧毒 +5，总计约 6
-        assert!(threat > 5.0, "Poisonous minion threat should include poison bonus");
+        assert!(
+            threat > 5.0,
+            "Poisonous minion threat should include poison bonus"
+        );
     }
 }

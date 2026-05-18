@@ -300,7 +300,10 @@ mod tests {
 
     #[test]
     fn test_behavior_names() {
-        assert_eq!(default_behavior::DefaultBehavior.name(), "Default (Balanced)");
+        assert_eq!(
+            default_behavior::DefaultBehavior.name(),
+            "Default (Balanced)"
+        );
         assert_eq!(rush_behavior::RushBehavior.name(), "Rush (Aggro)");
         assert_eq!(control_behavior::ControlBehavior.name(), "Control");
     }

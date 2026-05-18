@@ -166,7 +166,7 @@ mod tests {
         assert_eq!(dialogs.len(), 23);
         // all distinct
         for i in 0..dialogs.len() {
-            for j in i+1..dialogs.len() {
+            for j in i + 1..dialogs.len() {
                 assert_ne!(dialogs[i], dialogs[j]);
             }
         }

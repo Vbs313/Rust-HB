@@ -3,9 +3,9 @@
 //! 对应 C# 版的 BotManager.cs
 
 // unused
-use std::sync::Arc;
-use dashmap::DashMap;
 use crate::{Bot, BotError};
+use dashmap::DashMap;
+use std::sync::Arc;
 
 /// Bot 管理器
 pub struct BotManager {
@@ -47,7 +47,8 @@ impl BotManager {
 
     /// 启动指定 Bot
     pub fn start(&mut self, name: &str) -> Result<(), BotError> {
-        let bot = self.get(name)
+        let bot = self
+            .get(name)
             .ok_or_else(|| BotError::BotNotFound(name.to_string()))?;
 
         if self.running {
@@ -94,13 +95,27 @@ mod tests {
     struct TestBot;
 
     impl Bot for TestBot {
-        fn name(&self) -> &'static str { "TestBot" }
-        fn author(&self) -> &'static str { "Tester" }
-        fn description(&self) -> &'static str { "Test bot for unit tests" }
-        fn start(&self) -> Result<(), BotError> { Ok(()) }
-        fn stop(&self) -> Result<(), BotError> { Ok(()) }
-        fn pulse(&self) -> Result<(), BotError> { Ok(()) }
-        fn is_running(&self) -> bool { true }
+        fn name(&self) -> &'static str {
+            "TestBot"
+        }
+        fn author(&self) -> &'static str {
+            "Tester"
+        }
+        fn description(&self) -> &'static str {
+            "Test bot for unit tests"
+        }
+        fn start(&self) -> Result<(), BotError> {
+            Ok(())
+        }
+        fn stop(&self) -> Result<(), BotError> {
+            Ok(())
+        }
+        fn pulse(&self) -> Result<(), BotError> {
+            Ok(())
+        }
+        fn is_running(&self) -> bool {
+            true
+        }
     }
 
     #[test]
@@ -136,7 +151,10 @@ mod tests {
         mgr.register(Arc::new(TestBot));
 
         assert!(mgr.start("TestBot").is_ok());
-        assert!(mgr.start("TestBot").is_err(), "Should error: already running");
+        assert!(
+            mgr.start("TestBot").is_err(),
+            "Should error: already running"
+        );
 
         assert!(mgr.stop().is_ok());
     }

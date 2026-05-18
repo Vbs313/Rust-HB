@@ -114,21 +114,49 @@ mod tests {
     struct TestCard;
 
     impl CardSim for TestCard {
-        fn card_id(&self) -> CardId { 999 }
+        fn card_id(&self) -> CardId {
+            999
+        }
 
-        fn on_card_play(&self, pf: &mut Playfield, own: bool, _target: Option<&Minion>, _choice: i32) {
+        fn on_card_play(
+            &self,
+            pf: &mut Playfield,
+            own: bool,
+            _target: Option<&Minion>,
+            _choice: i32,
+        ) {
             if own {
                 pf.own_hero.hp += 5; // Test: restore 5 hp
             }
         }
 
-        fn get_battlecry_effect(&self, pf: &mut Playfield, own: Minion, _target: Option<&Minion>, _choice: i32) {
+        fn get_battlecry_effect(
+            &self,
+            pf: &mut Playfield,
+            own: Minion,
+            _target: Option<&Minion>,
+            _choice: i32,
+        ) {
             pf.summon_minion(own.card_id, 0, true);
         }
 
         fn on_deathrattle(&self, _pf: &mut Playfield, _source: Minion) {}
-        fn on_minion_got_dmg_trigger(&self, _pf: &mut Playfield, _m: &Minion, _anz_own: i32, _anz_enemy: i32) {}
-        fn on_minion_got_healed_trigger(&self, _pf: &mut Playfield, _m: &Minion, _anz_own: i32, _anz_enemy: i32) {}
+        fn on_minion_got_dmg_trigger(
+            &self,
+            _pf: &mut Playfield,
+            _m: &Minion,
+            _anz_own: i32,
+            _anz_enemy: i32,
+        ) {
+        }
+        fn on_minion_got_healed_trigger(
+            &self,
+            _pf: &mut Playfield,
+            _m: &Minion,
+            _anz_own: i32,
+            _anz_enemy: i32,
+        ) {
+        }
         fn on_summon(&self, _pf: &mut Playfield, _m: &Minion) {}
         fn on_turn_start_trigger(&self, _pf: &mut Playfield, _own: bool) {}
         fn on_turn_end_trigger(&self, _pf: &mut Playfield, _own: bool) {}

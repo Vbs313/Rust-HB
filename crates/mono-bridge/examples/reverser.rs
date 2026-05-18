@@ -31,27 +31,33 @@ fn main() {
 
     // 2. 使用已知的 corlib MonoImage 地址（从 scan 示例获取）
     println!("[Step 1] Finding Assembly-CSharp via known corlib anchor...");
-    
+
     let corlib_addr: usize = 0x969ea60;
-    let corlib_name = read_string_opt(&p, 
-        p.read_memory::<u32>(corlib_addr + 0x1C).unwrap_or(0) as usize, 32)
-        .unwrap_or_default();
+    let corlib_name = read_string_opt(
+        &p,
+        p.read_memory::<u32>(corlib_addr + 0x1C).unwrap_or(0) as usize,
+        32,
+    )
+    .unwrap_or_default();
     println!("   corlib @ 0x{corlib_addr:08x} name='{corlib_name}'");
-    
+
     let search_start = corlib_addr.saturating_sub(0x200000);
     let search_end = corlib_addr.saturating_add(0x200000).min(0x7FFFFFFF);
-    
+
     let img_addr = find_image_in_range(&p, "Assembly-CSharp", search_start, search_end)
         .or_else(|| find_image_in_range(&p, "Assembly", search_start, search_end));
-    
+
     let img_addr = match img_addr {
         Some(addr) => {
-            let name = read_string_opt(&p, 
-                p.read_memory::<u32>(addr + 0x1C).unwrap_or(0) as usize, 48)
-                .unwrap_or_default();
+            let name = read_string_opt(
+                &p,
+                p.read_memory::<u32>(addr + 0x1C).unwrap_or(0) as usize,
+                48,
+            )
+            .unwrap_or_default();
             println!("   ✅ Assembly-CSharp @ 0x{addr:08x} (name='{name}')");
             addr
-        },
+        }
         None => {
             println!("❌ Assembly-CSharp not found near corlib!");
             return;
@@ -141,9 +147,7 @@ fn main() {
             // 8. 写入 class list 文件
             let out_path = "target/mono_classes.txt";
             let mut out = String::new();
-            out.push_str(&format!(
-                "class_cache_offset=0x{off:02X}\n\n"
-            ));
+            out.push_str(&format!("class_cache_offset=0x{off:02X}\n\n"));
             for (ns, name) in classes {
                 out.push_str(&format!("{ns}.{name}\n"));
             }
@@ -161,18 +165,21 @@ fn main() {
 /// 在指定范围搜索 MonoImage
 fn find_image_in_range(p: &ProcessHandle, target: &str, start: usize, end: usize) -> Option<usize> {
     let chunk = 0x10000usize; // 64KB
-    
+
     let mut addr = start;
     while addr < end {
         let mbi = match query_memory_info(p, addr) {
             Ok(m) => m,
-            Err(_) => { addr += 0x10000; continue; }
+            Err(_) => {
+                addr += 0x10000;
+                continue;
+            }
         };
         let region_start = mbi.BaseAddress as usize;
         let region_size = mbi.RegionSize;
         let committed = mbi.State == 0x1000;
         let readable = (mbi.Protect & 0x02) != 0 || (mbi.Protect & 0x04) != 0;
-        
+
         if committed && readable && region_size > 0x1000 && region_size < 0x800000 {
             let mut off = 0usize;
             while off < region_size {
@@ -180,14 +187,22 @@ fn find_image_in_range(p: &ProcessHandle, target: &str, start: usize, end: usize
                 if let Ok(data) = p.read_bytes(region_start + off, read_size) {
                     for i in (0..data.len().saturating_sub(0x28)).step_by(4) {
                         let name_ptr = u32::from_le_bytes([
-                            data[i+0x1C], data[i+0x1C+1], data[i+0x1C+2], data[i+0x1C+3],
+                            data[i + 0x1C],
+                            data[i + 0x1C + 1],
+                            data[i + 0x1C + 2],
+                            data[i + 0x1C + 3],
                         ]) as usize;
-                        if !(0x00010000..0x7FFFFFFF).contains(&name_ptr) { continue; }
+                        if !(0x00010000..0x7FFFFFFF).contains(&name_ptr) {
+                            continue;
+                        }
                         if let Some(name) = read_string_opt(p, name_ptr, 48) {
                             if name.contains(target) {
                                 let abs_addr = region_start + off + i;
                                 let file_ptr = u32::from_le_bytes([
-                                    data[i+0x20], data[i+0x20+1], data[i+0x20+2], data[i+0x20+3],
+                                    data[i + 0x20],
+                                    data[i + 0x20 + 1],
+                                    data[i + 0x20 + 2],
+                                    data[i + 0x20 + 3],
                                 ]) as usize;
                                 if (0x00010000..0x7FFFFFFF).contains(&file_ptr) {
                                     return Some(abs_addr);
@@ -200,7 +215,9 @@ fn find_image_in_range(p: &ProcessHandle, target: &str, start: usize, end: usize
             }
         }
         addr = region_start + region_size.max(0x10000);
-        if addr > end { break; }
+        if addr > end {
+            break;
+        }
     }
     None
 }
@@ -224,9 +241,8 @@ fn find_pointer_fields(
     let mut pointers = Vec::new();
 
     for off in (0..data.len() - 4).step_by(4) {
-        let val = u32::from_le_bytes([
-            data[off], data[off + 1], data[off + 2], data[off + 3],
-        ]) as usize;
+        let val =
+            u32::from_le_bytes([data[off], data[off + 1], data[off + 2], data[off + 3]]) as usize;
 
         if !(0x00010000..0x7FFFFFFF).contains(&val) {
             continue;
@@ -252,11 +268,15 @@ fn compute_label(p: &ProcessHandle, val: usize) -> String {
     }
 
     // 是否为空终止 ASCII 字符串？
-    if b.iter().all(|&c| c.is_ascii_graphic() || c == b' ' || c == b'\0') {
+    if b.iter()
+        .all(|&c| c.is_ascii_graphic() || c == b' ' || c == b'\0')
+    {
         let len = b.iter().position(|&c| c == 0).unwrap_or(8);
         if len >= 3 && len <= 30 {
             let s = String::from_utf8_lossy(&b[..len]).to_string();
-            if s.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '_' || c == '-' || c == ' ') {
+            if s.chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '_' || c == '-' || c == ' ')
+            {
                 if val > 0x01000000 && is_pointer_array(p, val) {
                     return "<ptr_array>".into();
                 }
@@ -287,7 +307,12 @@ fn is_pointer_array(p: &ProcessHandle, addr: usize) -> bool {
         let ptr_count = data.len() / 4;
         let mut valid_ptrs = 0;
         for i in 0..ptr_count.min(16) {
-            let v = u32::from_le_bytes([data[i * 4], data[i * 4 + 1], data[i * 4 + 2], data[i * 4 + 3]]) as usize;
+            let v = u32::from_le_bytes([
+                data[i * 4],
+                data[i * 4 + 1],
+                data[i * 4 + 2],
+                data[i * 4 + 3],
+            ]) as usize;
             if (0x00010000..0x7FFFFFFF).contains(&v) {
                 valid_ptrs += 1;
             }
@@ -331,7 +356,11 @@ fn try_read_class_cache(
 ///   +0x00: key (void*)   ← 通常为 const char* (类名字符串)
 ///   +0x04: value (void*) ← MonoClass*
 ///   +0x08: hash (int)
-fn try_as_ghashtable(p: &ProcessHandle, addr: usize, _img_addr: usize) -> Option<Vec<(String, String)>> {
+fn try_as_ghashtable(
+    p: &ProcessHandle,
+    addr: usize,
+    _img_addr: usize,
+) -> Option<Vec<(String, String)>> {
     let data = p.read_bytes(addr, 0x20).ok()?;
 
     let size = u32::from_le_bytes([data[0], data[1], data[2], data[3]]);
@@ -366,8 +395,18 @@ fn try_as_ghashtable(p: &ProcessHandle, addr: usize, _img_addr: usize) -> Option
         if off + 8 >= node_data.len() {
             break;
         }
-        let key = u32::from_le_bytes([node_data[off], node_data[off + 1], node_data[off + 2], node_data[off + 3]]) as usize;
-        let _value = u32::from_le_bytes([node_data[off + 4], node_data[off + 5], node_data[off + 6], node_data[off + 7]]) as usize;
+        let key = u32::from_le_bytes([
+            node_data[off],
+            node_data[off + 1],
+            node_data[off + 2],
+            node_data[off + 3],
+        ]) as usize;
+        let _value = u32::from_le_bytes([
+            node_data[off + 4],
+            node_data[off + 5],
+            node_data[off + 6],
+            node_data[off + 7],
+        ]) as usize;
 
         if !(0x00010000..0x7FFFFFFF).contains(&key) {
             continue;
@@ -381,7 +420,9 @@ fn try_as_ghashtable(p: &ProcessHandle, addr: usize, _img_addr: usize) -> Option
                     let ns = parts[0].to_string();
                     let name = parts[1].to_string();
                     if name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
-                        && ns.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '.')
+                        && ns
+                            .chars()
+                            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '.')
                     {
                         classes.push((ns, name));
                     }
@@ -401,7 +442,11 @@ fn try_as_ghashtable(p: &ProcessHandle, addr: usize, _img_addr: usize) -> Option
 ///   +0x00: GHashTable* (optional base)
 ///   +0x04: len (int)
 ///   +0x08: data (void**)  ← 指针数组
-fn try_as_gptrarray(p: &ProcessHandle, addr: usize, _img_addr: usize) -> Option<Vec<(String, String)>> {
+fn try_as_gptrarray(
+    p: &ProcessHandle,
+    addr: usize,
+    _img_addr: usize,
+) -> Option<Vec<(String, String)>> {
     let data = p.read_bytes(addr, 0x10).ok()?;
     if data.len() < 12 {
         return None;
@@ -429,7 +474,12 @@ fn try_as_gptrarray(p: &ProcessHandle, addr: usize, _img_addr: usize) -> Option<
         if i * 4 + 4 > arr_data.len() {
             break;
         }
-        let ptr = u32::from_le_bytes([arr_data[i * 4], arr_data[i * 4 + 1], arr_data[i * 4 + 2], arr_data[i * 4 + 3]]) as usize;
+        let ptr = u32::from_le_bytes([
+            arr_data[i * 4],
+            arr_data[i * 4 + 1],
+            arr_data[i * 4 + 2],
+            arr_data[i * 4 + 3],
+        ]) as usize;
 
         if !(0x00010000..0x7FFFFFFF).contains(&ptr) {
             continue;
@@ -494,8 +544,12 @@ fn try_read_mono_class(p: &ProcessHandle, addr: usize) -> Option<(String, String
                         && class_name.len() < 40
                         && ns.len() >= 2
                         && ns.len() < 40
-                        && class_name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '`')
-                        && ns.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '.')
+                        && class_name
+                            .chars()
+                            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '`')
+                        && ns
+                            .chars()
+                            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '.')
                         && !class_name.starts_with("_")
                         && !class_name.starts_with("<")
                     {
@@ -510,11 +564,7 @@ fn try_read_mono_class(p: &ProcessHandle, addr: usize) -> Option<(String, String
 
 /// 暴力搜索 MonoClass name 字段偏移
 /// 策略：从 MonoImage 地址附近搜索所有可能指向字符串的指针
-fn brute_force_mono_class_name(
-    p: &ProcessHandle,
-    _img_data: &[u8],
-    img_addr: usize,
-) {
+fn brute_force_mono_class_name(p: &ProcessHandle, _img_data: &[u8], img_addr: usize) {
     println!("\n   Scanning memory near MonoImage for pointers to strings...");
 
     let mut name_candidates: HashSet<usize> = HashSet::new();
@@ -528,20 +578,26 @@ fn brute_force_mono_class_name(
     while addr < scan_end {
         if let Ok(data) = p.read_bytes(addr, chunk_size) {
             for off in (0..data.len() - 12).step_by(4) {
-                let ptr = u32::from_le_bytes([data[off], data[off+1], data[off+2], data[off+3]]) as usize;
+                let ptr =
+                    u32::from_le_bytes([data[off], data[off + 1], data[off + 2], data[off + 3]])
+                        as usize;
                 if !(0x00010000..0x7FFFFFFF).contains(&ptr) {
                     continue;
                 }
                 // 检查 ptr 指向的内容是否像类名
                 if let Some(s) = read_string_opt(p, ptr, 32) {
-                    if s.len() >= 2 && s.len() < 30
+                    if s.len() >= 2
+                        && s.len() < 30
                         && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
                     {
                         let source_addr = addr + off;
                         // 只关注在 MonoImage 范围内的
                         if source_addr >= img_addr && source_addr < img_addr + 0x80 {
                             name_candidates.insert(source_addr - img_addr);
-                            println!("     MonoImage+0x{:03X} -> '{s}' @ 0x{ptr:x}", source_addr - img_addr);
+                            println!(
+                                "     MonoImage+0x{:03X} -> '{s}' @ 0x{ptr:x}",
+                                source_addr - img_addr
+                            );
                         }
                     }
                 }
@@ -551,7 +607,10 @@ fn brute_force_mono_class_name(
     }
 
     if !name_candidates.is_empty() {
-        println!("\n   🎯 Found {} potential class name pointers in MonoImage!", name_candidates.len());
+        println!(
+            "\n   🎯 Found {} potential class name pointers in MonoImage!",
+            name_candidates.len()
+        );
         println!("   These offsets could be MonoClass.name fields");
     }
 }
@@ -589,8 +648,6 @@ fn dump_hex(data: &[u8], base: usize, label: &str) {
                 asc.push(if b.is_ascii_graphic() { b as char } else { '.' });
             }
         }
-        println!(
-            "   +0x{off:02X} | {hex:48} | {asc}"
-        );
+        println!("   +0x{off:02X} | {hex:48} | {asc}");
     }
 }

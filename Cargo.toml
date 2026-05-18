@@ -15,6 +15,7 @@ members = [
     "crates/compression",
     "crates/ipc",
     "crates/app",
+    "crates/inject",
 ]
 
 [workspace.package]
