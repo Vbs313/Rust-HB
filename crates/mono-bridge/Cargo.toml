@@ -1,0 +1,14 @@
+[package]
+name = "hb-mono-bridge"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Mono runtime bridge - replaces GreyMagic.dll for reading Unity/Mono process memory"
+
+[dependencies]
+windows.workspace = true
+hb-core = { path = "../core" }
+thiserror.workspace = true
+tracing.workspace = true
+once_cell.workspace = true
+parking_lot.workspace = true

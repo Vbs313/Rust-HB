@@ -1,0 +1,11 @@
+[package]
+name = "hb-process-mgr"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Process management: multi-instance, process discovery, window management"
+
+[dependencies]
+hb-core = { path = "../core" }
+thiserror.workspace = true
+tracing.workspace = true

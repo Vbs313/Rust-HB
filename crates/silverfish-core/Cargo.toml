@@ -1,0 +1,18 @@
+[package]
+name = "hb-silverfish-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Silverfish AI engine core - game state simulation, DFS search, card evaluation"
+
+[dependencies]
+hb-core = { path = "../core" }
+rand.workspace = true
+tracing.workspace = true
+thiserror.workspace = true
+parking_lot.workspace = true
+dashmap.workspace = true
+enum-map.workspace = true
+enumflags2.workspace = true
+serde = { workspace = true, features = [] }
+serde_json.workspace = true

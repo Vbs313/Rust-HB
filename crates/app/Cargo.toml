@@ -1,0 +1,22 @@
+[package]
+name = "hb-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Hearthbuddy Rust edition - main application entry point"
+
+[dependencies]
+hb-core = { path = "../core" }
+hb-mono-bridge = { path = "../mono-bridge" }
+hb-game-api = { path = "../game-api" }
+hb-input-sim = { path = "../input-sim" }
+hb-process-mgr = { path = "../process-mgr" }
+hb-bot-framework = { path = "../bot-framework" }
+hb-silverfish-core = { path = "../silverfish-core" }
+hb-auth = { path = "../auth" }
+hb-compression = { path = "../compression" }
+hb-plugins = { path = "../plugins" }
+tracing.workspace = true
+tokio.workspace = true
+anyhow.workspace = true
+clap = { version = "4", features = ["derive"] }

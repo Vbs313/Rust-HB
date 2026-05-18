@@ -1,0 +1,16 @@
+[package]
+name = "hb-silverfish-card-db"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Hearthstone card database - generated at build time from card definitions"
+
+[dependencies]
+hb-silverfish-core = { path = "../silverfish-core" }
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+
+[build-dependencies]
+serde.workspace = true
+serde_json.workspace = true

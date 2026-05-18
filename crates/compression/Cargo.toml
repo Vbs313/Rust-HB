@@ -1,0 +1,10 @@
+[package]
+name = "hb-compression"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "LZMA compression (replacement for C# LZMA SDK)"
+
+[dependencies]
+flate2.workspace = true
+thiserror.workspace = true

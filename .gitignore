@@ -1,0 +1,49 @@
+# Rust build artifacts
+target/
+**/*.rs.bk
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+**/.server-logs/
+**/.command-logs/
+
+# Config
+*.local.*
+.env
+auth.json
+models.json
+
+# Python
+__pycache__/
+*.pyc
+
+# Build output
+Build/
+CompilingDLLs/
+
+# Pi agent cache
+.pi-lens/
+
+# Temp scripts
+_check_admin.ps1
+_fix_bash_steps.bat
+_run_commands.ps1
+_run_copy.cmd
+_run_copy.ps1
+fix_bash.bat
+nul
+test.txt
+context.md
+setup_*.js
+copy_bash.sh
+card_data_keywords.json

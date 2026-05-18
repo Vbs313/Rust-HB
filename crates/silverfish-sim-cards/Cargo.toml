@@ -1,0 +1,11 @@
+[package]
+name = "hb-silverfish-sim-cards"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Hearthstone card simulation implementations - generated from card definitions"
+
+[dependencies]
+hb-silverfish-core = { path = "../silverfish-core" }
+hb-silverfish-card-db = { path = "../silverfish-card-db" }
+tracing.workspace = true
