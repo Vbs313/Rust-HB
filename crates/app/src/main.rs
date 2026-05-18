@@ -89,9 +89,9 @@ async fn run_game_loop(ipc: &mut IpcClient, routine_mgr: &RoutineManager) {
 
         tracing::info!("🎯 Our turn! Mana: {}/{}", state.own_mana, state.own_max_mana);
 
-        // 调用 AI 引擎
+        // 调用 AI 引擎（传入实时游戏状态）
         if let Some(routine) = routine_mgr.active() {
-            match routine.our_turn_logic() {
+            match routine.our_turn_logic(&state) {
                 Ok(()) => tracing::info!("AI decision completed"),
                 Err(e) => tracing::error!("AI error: {e}"),
             }
@@ -111,7 +111,20 @@ async fn run_demo_loop(routine_mgr: &RoutineManager) {
         tick += 1;
         tracing::info!("Demo tick {tick}: running AI routine...");
         if let Some(routine) = routine_mgr.active() {
-            if let Err(e) = routine.our_turn_logic() {
+            // Demo mode: use empty state
+            let demo_state = hb_ipc::GameStateData {
+                scene: "Hub".into(), is_own_turn: false, turn: 0,
+                own_mana: 10, own_max_mana: 10,
+                own_hero: hb_ipc::EntityData { entity_id: 1, card_id: "HERO_01".into(), health: 30, attack: 0, armor: 0,
+                    has_taunt: false, has_divine_shield: false, has_stealth: false, has_poisonous: false,
+                    has_lifesteal: false, is_exhausted: false, num_attacks: 0 },
+                enemy_hero: hb_ipc::EntityData { entity_id: 2, card_id: "HERO_02".into(), health: 30, attack: 0, armor: 0,
+                    has_taunt: false, has_divine_shield: false, has_stealth: false, has_poisonous: false,
+                    has_lifesteal: false, is_exhausted: false, num_attacks: 0 },
+                own_hand: vec![], own_minions: vec![], enemy_minions: vec![],
+                own_hand_count: 0, enemy_hand_count: 0, own_deck_count: 30, enemy_deck_count: 30,
+            };
+            if let Err(e) = routine.our_turn_logic(&demo_state) {
                 tracing::warn!("Routine error: {e}");
             }
         }

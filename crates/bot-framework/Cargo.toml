@@ -9,6 +9,7 @@ description = "Bot/Plugin/Routine framework and plugin management"
 hb-core = { path = "../core" }
 hb-game-api = { path = "../game-api" }
 hb-silverfish-core = { path = "../silverfish-core" }
+hb-ipc = { path = "../ipc" }
 tracing.workspace = true
 thiserror.workspace = true
 serde.workspace = true

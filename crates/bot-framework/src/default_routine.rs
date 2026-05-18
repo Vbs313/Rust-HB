@@ -40,57 +40,58 @@ impl Routine for DefaultRoutine {
         self.description
     }
 
-    fn our_turn_logic(&self) -> Result<(), BotError> {
-        tracing::info!("DefaultRoutine: our_turn_logic called");
+    fn our_turn_logic(&self, state: &hb_ipc::GameStateData) -> Result<(), BotError> {
+        tracing::info!("DefaultRoutine: turn={} scene={:?}", state.turn, state.scene);
 
-        // 创建一个模拟局面用于测试
-        // 实际游戏中，这里会从 game-api 读取实时局面
         let mut pf = hb_silverfish_core::playfield::Playfield::new();
-
-        // 设置基本状态
-        pf.mana = 10;
-        pf.own_max_mana = 10;
-        pf.enemy_max_mana = 10;
-        pf.is_own_turn = true;
-        pf.own_hero.hp = 30;
-        pf.enemy_hero.hp = 30;
-        pf.own_hero.entity_id = 1;
-        pf.enemy_hero.entity_id = 2;
-
-        // 添加一些测试手牌
-        pf.own_hand.push(hb_silverfish_core::playfield::HandCard {
-            card_id: 602, // 北郡牧师
-            entity_id: 10,
-            position: 0,
-            cost: 2,
-            original_cost: 2,
-            attack: 1,
-            health: 3,
-            card_type: hb_silverfish_core::CardType::Minion,
-            race: hb_silverfish_core::Race::None,
-            is_choice: false,
-            has_targets: false,
-            is_tradeable: false,
-            is_forge: false,
-        });
-
-        // 添加一些敌方随从
-        pf.enemy_minions
-            .push(hb_silverfish_core::minion::Minion::new_minion(1001, 3, 3));
-        pf.enemy_minions[0].entity_id = 20;
-
-        // 使用 AI 引擎搜索最佳动作
-        let ai = hb_silverfish_core::ai::Ai::new();
-        let _move_gen = hb_silverfish_core::move_generator::MoveGenerator::new();
-        let _behavior = hb_silverfish_core::behavior::default_behavior::DefaultBehavior;
-
-        tracing::info!("Starting AI search...");
-        let result = ai.do_all(&pf);
-        match result {
-            Some(action) => tracing::info!("AI chose: {:?}", action.action_type),
-            None => tracing::warn!("AI found no valid action"),
+        pf.mana = state.own_mana as i32;
+        pf.own_max_mana = state.own_max_mana as i32;
+        pf.enemy_max_mana = state.own_max_mana as i32;
+        pf.is_own_turn = state.is_own_turn;
+        pf.own_hero.hp = state.own_hero.health;
+        pf.own_hero.armor = state.own_hero.armor;
+        pf.own_hero.angr = state.own_hero.attack;
+        pf.own_hero.entity_id = state.own_hero.entity_id;
+        pf.enemy_hero.hp = state.enemy_hero.health;
+        pf.enemy_hero.armor = state.enemy_hero.armor;
+        pf.enemy_hero.angr = state.enemy_hero.attack;
+        pf.enemy_hero.entity_id = state.enemy_hero.entity_id;
+        
+        for (i, card) in state.own_hand.iter().enumerate() {
+            pf.own_hand.push(hb_silverfish_core::playfield::HandCard {
+                card_id: card.card_id.parse::<u32>().unwrap_or(0),
+                entity_id: card.entity_id, position: i as i32,
+                cost: card.cost, original_cost: card.cost,
+                attack: card.attack, health: card.health,
+                card_type: hb_silverfish_core::CardType::Minion,
+                race: hb_silverfish_core::Race::None,
+                is_choice: false, has_targets: false,
+                is_tradeable: false, is_forge: false,
+            });
         }
-
+        for minion in &state.own_minions {
+            let mut m = hb_silverfish_core::minion::Minion::new_minion(
+                minion.card_id.parse::<u32>().unwrap_or(0), minion.attack, minion.health);
+            m.entity_id = minion.entity_id; m.taunt = minion.has_taunt;
+            m.divine_shield = minion.has_divine_shield; m.stealth = minion.has_stealth;
+            m.poisonous = minion.has_poisonous; m.lifesteal = minion.has_lifesteal;
+            m.ready = !minion.is_exhausted;
+            pf.own_minions.push(m);
+        }
+        for minion in &state.enemy_minions {
+            let mut m = hb_silverfish_core::minion::Minion::new_minion(
+                minion.card_id.parse::<u32>().unwrap_or(0), minion.attack, minion.health);
+            m.entity_id = minion.entity_id; m.taunt = minion.has_taunt;
+            m.divine_shield = minion.has_divine_shield; m.stealth = minion.has_stealth;
+            m.poisonous = minion.has_poisonous; m.lifesteal = minion.has_lifesteal;
+            pf.enemy_minions.push(m);
+        }
+        
+        let ai = hb_silverfish_core::ai::Ai::new();
+        match ai.do_all(&pf) {
+            Some(action) => tracing::info!("AI chose: {:?} (p={})", action.action_type, action.penality),
+            None => tracing::warn!("AI no action"),
+        }
         Ok(())
     }
 

@@ -52,8 +52,8 @@ pub trait Routine: Send + Sync {
     fn author(&self) -> &'static str;
     fn description(&self) -> &'static str;
 
-    /// 我方回合逻辑
-    fn our_turn_logic(&self) -> Result<(), BotError>;
+    /// 我方回合逻辑（接收游戏状态）
+    fn our_turn_logic(&self, state: &hb_ipc::GameStateData) -> Result<(), BotError>;
     /// 留牌逻辑
     fn mulligan_logic(&self) -> Result<Vec<i32>, BotError>;
 }
