@@ -41,7 +41,11 @@ impl Routine for DefaultRoutine {
     }
 
     fn our_turn_logic(&self, state: &hb_ipc::GameStateData) -> Result<(), BotError> {
-        tracing::info!("DefaultRoutine: turn={} scene={:?}", state.turn, state.scene);
+        tracing::info!(
+            "DefaultRoutine: turn={} scene={:?}",
+            state.turn,
+            state.scene
+        );
 
         let mut pf = hb_silverfish_core::playfield::Playfield::new();
         pf.mana = state.own_mana as i32;
@@ -56,40 +60,59 @@ impl Routine for DefaultRoutine {
         pf.enemy_hero.armor = state.enemy_hero.armor;
         pf.enemy_hero.angr = state.enemy_hero.attack;
         pf.enemy_hero.entity_id = state.enemy_hero.entity_id;
-        
+
         for (i, card) in state.own_hand.iter().enumerate() {
             pf.own_hand.push(hb_silverfish_core::playfield::HandCard {
                 card_id: card.card_id.parse::<u32>().unwrap_or(0),
-                entity_id: card.entity_id, position: i as i32,
-                cost: card.cost, original_cost: card.cost,
-                attack: card.attack, health: card.health,
+                entity_id: card.entity_id,
+                position: i as i32,
+                cost: card.cost,
+                original_cost: card.cost,
+                attack: card.attack,
+                health: card.health,
                 card_type: hb_silverfish_core::CardType::Minion,
                 race: hb_silverfish_core::Race::None,
-                is_choice: false, has_targets: false,
-                is_tradeable: false, is_forge: false,
+                is_choice: false,
+                has_targets: false,
+                is_tradeable: false,
+                is_forge: false,
             });
         }
         for minion in &state.own_minions {
             let mut m = hb_silverfish_core::minion::Minion::new_minion(
-                minion.card_id.parse::<u32>().unwrap_or(0), minion.attack, minion.health);
-            m.entity_id = minion.entity_id; m.taunt = minion.has_taunt;
-            m.divine_shield = minion.has_divine_shield; m.stealth = minion.has_stealth;
-            m.poisonous = minion.has_poisonous; m.lifesteal = minion.has_lifesteal;
+                minion.card_id.parse::<u32>().unwrap_or(0),
+                minion.attack,
+                minion.health,
+            );
+            m.entity_id = minion.entity_id;
+            m.taunt = minion.has_taunt;
+            m.divine_shield = minion.has_divine_shield;
+            m.stealth = minion.has_stealth;
+            m.poisonous = minion.has_poisonous;
+            m.lifesteal = minion.has_lifesteal;
             m.ready = !minion.is_exhausted;
             pf.own_minions.push(m);
         }
         for minion in &state.enemy_minions {
             let mut m = hb_silverfish_core::minion::Minion::new_minion(
-                minion.card_id.parse::<u32>().unwrap_or(0), minion.attack, minion.health);
-            m.entity_id = minion.entity_id; m.taunt = minion.has_taunt;
-            m.divine_shield = minion.has_divine_shield; m.stealth = minion.has_stealth;
-            m.poisonous = minion.has_poisonous; m.lifesteal = minion.has_lifesteal;
+                minion.card_id.parse::<u32>().unwrap_or(0),
+                minion.attack,
+                minion.health,
+            );
+            m.entity_id = minion.entity_id;
+            m.taunt = minion.has_taunt;
+            m.divine_shield = minion.has_divine_shield;
+            m.stealth = minion.has_stealth;
+            m.poisonous = minion.has_poisonous;
+            m.lifesteal = minion.has_lifesteal;
             pf.enemy_minions.push(m);
         }
-        
+
         let ai = hb_silverfish_core::ai::Ai::new();
         match ai.do_all(&pf) {
-            Some(action) => tracing::info!("AI chose: {:?} (p={})", action.action_type, action.penality),
+            Some(action) => {
+                tracing::info!("AI chose: {:?} (p={})", action.action_type, action.penality)
+            }
             None => tracing::warn!("AI no action"),
         }
         Ok(())

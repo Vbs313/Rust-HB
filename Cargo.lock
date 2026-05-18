@@ -351,6 +351,7 @@ dependencies = [
  "dashmap",
  "hb-core",
  "hb-game-api",
+ "hb-ipc",
  "hb-silverfish-core",
  "parking_lot",
  "serde",
@@ -395,6 +396,10 @@ dependencies = [
  "tracing",
  "windows",
 ]
+
+[[package]]
+name = "hb-inject"
+version = "0.1.0"
 
 [[package]]
 name = "hb-input-sim"
