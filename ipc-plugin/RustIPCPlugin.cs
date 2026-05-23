@@ -9,6 +9,7 @@ using System.Text;
 using System.Threading;
 using System.Web.Script.Serialization;
 using UnityEngine;
+using System.Runtime.InteropServices;
 
 // ===== BepInEx IPC Plugin (uses reflection for Hearthstone API) =====
 
@@ -147,9 +148,10 @@ public class RustIPCPlugin : BaseUnityPlugin
                 case "GetGameState": return HandleGetGameState(msg.seq);
                 case "Ping": return HandlePing(msg.seq, json);
                 case "PerformAction": return HandlePerformAction(msg.seq, json);
+                case "DumpClass": return HandleDumpClass(msg.seq, msg.args);
+                case "EnumerateClasses": return HandleEnumerateClasses(msg.seq);
                 default: return Err(msg.seq, "Unknown: " + msg.type);
             }
-        }
         catch (Exception ex)
         {
             return Err(0, "Parse: " + ex.Message);
@@ -558,9 +560,82 @@ public class RustIPCPlugin : BaseUnityPlugin
         }
     }
 
+    // ===== Mono 结构探查（进程内直接取 TypeHandle.Value） =====
+
+    private string HandleDumpClass(uint seq, string className)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(className))
+                return Err(seq, "No class name provided");
+
+            Type type = Type.GetType(className + ", Assembly-CSharp")
+                ?? Type.GetType(className + ", mscorlib")
+                ?? Type.GetType(className);
+
+            if (type == null)
+                return Err(seq, "Type not found: " + className);
+
+            IntPtr monoClassPtr = type.TypeHandle.Value;
+            _log.LogInfo($"Dumping MonoClass for {className} @ 0x{monoClassPtr:X8}");
+
+            byte[] raw = new byte[128];
+            Marshal.Copy(monoClassPtr, raw, 0, 128);
+
+            var sb = new StringBuilder();
+            sb.AppendLine($"MonoClass<{className}> @ 0x{monoClassPtr:X8}:");
+            for (int i = 0; i < 128; i += 16) {
+                sb.Append($"  +0x{i:X2}: ");
+                for (int j = 0; j < 16 && i + j < 128; j++)
+                    sb.Append($"{raw[i + j]:X2} ");
+                sb.AppendLine();
+            }
+
+            sb.AppendLine();
+            sb.AppendLine("Potential pointers (x86 u32):");
+            for (int i = 0; i < 128; i += 4) {
+                uint val = BitConverter.ToUInt32(raw, i);
+                if (val >= 0x10000 && val <= 0x7FFFFFFF)
+                    sb.AppendLine($"  +0x{i:X2}: 0x{val:X8}");
+            }
+
+            return _json.Serialize(new { seq, type = "DumpClass", data = sb.ToString() });
+        }
+        catch (Exception ex) {
+            _log.LogError("DumpClass: " + ex.ToString());
+            return Err(seq, "DumpClass: " + ex.Message);
+        }
+    }
+
+    private string HandleEnumerateClasses(uint seq)
+    {
+        try {
+            var sb = new StringBuilder();
+            int count = 0;
+            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies()) {
+                string aname = asm.GetName().Name;
+                if (aname != "Assembly-CSharp") continue;
+                foreach (var t in asm.GetTypes()) {
+                    if (!t.IsPublic && !t.IsNestedPublic) continue;
+                    IntPtr mcPtr = t.TypeHandle.Value;
+                    sb.AppendLine($"{t.FullName} | 0x{mcPtr:X8}");
+                    count++;
+                    if (count >= 200) break;
+                }
+                break;
+            }
+            sb.Insert(0, $"Assembly-CSharp public classes ({count} shown):" + Environment.NewLine);
+            return _json.Serialize(new { seq, type = "EnumerateClasses", data = sb.ToString() });
+        }
+        catch (Exception ex) {
+            _log.LogError("EnumerateClasses: " + ex.ToString());
+            return Err(seq, "EnumerateClasses: " + ex.Message);
+        }
+    }
+
     // ===== JSON data models =====
 
-    public class IpcMessage { public string type; public uint seq; }
+    public class IpcMessage { public string type; public uint seq; public string args; }
     public class GameStateResponse : IpcMessage { public GameStateData state; public GameStateResponse() { type = "GameState"; } }
     public class ActionResultResponse : IpcMessage { public bool success; public string error; public ActionResultResponse() { type = "ActionResult"; } }
     public class PongResponse : IpcMessage { public ulong timestamp; public PongResponse() { type = "Pong"; } }
