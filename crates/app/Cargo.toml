@@ -21,3 +21,4 @@ tracing.workspace = true
 tokio.workspace = true
 anyhow.workspace = true
 clap = { version = "4", features = ["derive"] }
+async-trait.workspace = true
