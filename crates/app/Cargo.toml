@@ -22,3 +22,6 @@ tokio.workspace = true
 anyhow.workspace = true
 clap = { version = "4", features = ["derive"] }
 async-trait.workspace = true
+phf.workspace = true
+ratatui.workspace = true
+crossterm.workspace = true
